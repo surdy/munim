@@ -51,7 +51,7 @@
       "active": true,
       "pubkey": "TODO_MINISIGN_PUBLIC_KEY",
       "endpoints": [
-        "https://github.com/OWNER/munim/releases/latest/download/latest.json"
+        "https://github.com/surdy/munim/releases/latest/download/latest.json"
       ]
     }
   }

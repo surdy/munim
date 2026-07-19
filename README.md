@@ -64,7 +64,7 @@ Linux is packaged as a **Flatpak** (not a raw Tauri bundle) — see `src-tauri/f
 - **macOS** — Developer ID signed + notarized `.dmg`; in-app auto-update via `tauri-plugin-updater` reading `latest.json` from GitHub Releases (needs a minisign keypair; see BUILD_SPEC §7).
 - **Linux** — Flatpak, auto-updating from a **self-hosted flatpak repo on GitHub Pages**. Users add the remote once:
   ```bash
-  flatpak remote-add --if-not-exists munim https://<you>.github.io/munim/index.flatpakrepo
+  flatpak remote-add --if-not-exists munim https://surdy.github.io/munim/index.flatpakrepo
   flatpak install munim com.munim.app
   ```
 

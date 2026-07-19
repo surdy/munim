@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.munim.app</id>
+  <id>io.github.surdy.munim</id>
   <name>munim</name>
   <summary>Local-first AI-coding usage &amp; cost tracker</summary>
   <metadata_license>MIT</metadata_license>
@@ -17,7 +17,7 @@
     </p>
     <p>Features a dark interactive dashboard, a system tray, auto-refresh, and a monthly budget with alerts.</p>
   </description>
-  <launchable type="desktop-id">com.munim.app.desktop</launchable>
+  <launchable type="desktop-id">io.github.surdy.munim.desktop</launchable>
   <url type="homepage">https://github.com/surdy/munim</url>
   <url type="bugtracker">https://github.com/surdy/munim/issues</url>
   <content_rating type="oars-1.1" />

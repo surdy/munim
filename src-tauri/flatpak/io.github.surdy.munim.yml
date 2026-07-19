@@ -6,7 +6,7 @@
 # it and exports to an OSTree repo published on GitHub Pages.
 #
 # UNVERIFIED on macOS (flatpak-builder is Linux-only) — validated in CI on ubuntu-latest.
-app-id: com.munim.app
+app-id: io.github.surdy.munim
 runtime: org.gnome.Platform
 runtime-version: '46'
 sdk: org.gnome.Sdk
@@ -33,10 +33,10 @@ modules:
     buildsystem: simple
     build-commands:
       - install -Dm755 munim /app/bin/munim
-      - install -Dm644 com.munim.app.desktop /app/share/applications/com.munim.app.desktop
-      - install -Dm644 com.munim.app.metainfo.xml /app/share/metainfo/com.munim.app.metainfo.xml
-      - install -Dm644 128x128.png /app/share/icons/hicolor/128x128/apps/com.munim.app.png
-      - install -Dm644 256x256.png /app/share/icons/hicolor/256x256/apps/com.munim.app.png
+      - install -Dm644 io.github.surdy.munim.desktop /app/share/applications/io.github.surdy.munim.desktop
+      - install -Dm644 io.github.surdy.munim.metainfo.xml /app/share/metainfo/io.github.surdy.munim.metainfo.xml
+      - install -Dm644 128x128.png /app/share/icons/hicolor/128x128/apps/io.github.surdy.munim.png
+      - install -Dm644 256x256.png /app/share/icons/hicolor/256x256/apps/io.github.surdy.munim.png
     sources:
       # CI populates `staging/` with the binary, desktop file, metainfo, and icons.
       - type: dir

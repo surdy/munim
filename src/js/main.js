@@ -347,10 +347,44 @@ function setupSessionViewToggle() {
     });
 }
 
+// Build the combined session list from the current window.__* globals, exactly as
+// loadData() does (normalizing provider tags). Used by the silent auto-refresh hook.
+function buildSessionsFromGlobals() {
+    const openclawSessions = window.__OPENCLAW_SESSIONS__ || window.__CLAWDBOT_SESSIONS__ || [];
+    const claudeSessions = window.__CLAUDE_SESSIONS__ || [];
+    const codexSessions = window.__CODEX_SESSIONS__ || [];
+
+    const claudeAll = [...openclawSessions, ...claudeSessions]
+        .map(s => s.provider ? s : { ...s, provider: 'claude' });
+    const codexAll = codexSessions
+        .map(s => s.provider ? s : { ...s, provider: 'codex' });
+    return [...claudeAll, ...codexAll];
+}
+
 function init() {
     loadData();
     initReloadButton();
     initDataTransfer();
+
+    // Silent auto-refresh hook (BUILD_SPEC §4.8). bootstrap.js re-fetches usage data into
+    // the window.__* globals on a `usage-updated` event, then calls this to re-render the
+    // dashboard IN PLACE — stat values, last-sync time, charts, heatmap, and tables — with
+    // NO splash and NO count-up intro animation (reRenderDashboard sets values directly).
+    // Defined here at the end of init so every helper above is in scope.
+    window.__munimRefresh = () => {
+        const summary = window.__SUMMARY__;
+        if (!summary) return;
+        const sessions = buildSessionsFromGlobals();
+
+        // Keep the cached full-count in sync so filter labels stay accurate.
+        allSessionsData = sessions;
+        totalSessionCount = sessions.length;
+
+        document.getElementById('last-updated').textContent =
+            new Date(summary.generated_at).toLocaleString();
+
+        reRenderDashboard(summary, sessions);
+    };
 }
 
 if (document.readyState === 'loading') {

@@ -82,6 +82,26 @@ function installBridge(invoke) {
 if (tauri?.event?.listen) {
     tauri.event.listen('menu-refresh', () => location.reload());
 }
+
+// Auto-refresh (BUILD_SPEC §4.8): the native shell emits `usage-updated` when a source
+// file changes on disk (debounced) or every 60s. Handle it SILENTLY — re-fetch the data,
+// refresh the window.__* globals, and re-render in place via main.js's __munimRefresh hook.
+// No splash, no toast, no location.reload(). A simple in-flight flag prevents overlap.
+if (tauri?.event?.listen && tauri?.core?.invoke) {
+    let refreshing = false;
+    tauri.event.listen('usage-updated', async () => {
+        if (refreshing) return;
+        refreshing = true;
+        try {
+            await loadUsage();
+            window.__munimRefresh?.();
+        } catch (err) {
+            console.error('[munim] auto-refresh failed:', err);
+        } finally {
+            refreshing = false;
+        }
+    });
+}
 if (tauri?.core?.invoke) {
     installBridge(tauri.core.invoke);
 }

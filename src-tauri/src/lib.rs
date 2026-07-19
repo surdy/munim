@@ -6,10 +6,13 @@
 
 mod commands;
 
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use std::sync::mpsc;
+use std::time::Duration;
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager,
+    AppHandle, Emitter, Manager,
 };
 use tauri_plugin_autostart::ManagerExt;
 
@@ -98,15 +101,117 @@ pub fn run() {
         })
         .setup(|app| {
             build_tray(app)?;
-            // TODO(spec §4.8): start the auto-refresh watcher (notify file-watch on the
-            //   resolved source dirs + 60s interval fallback, debounced, non-overlapping);
-            //   on each collect, emit an event to the webview and update tray labels.
+            // Auto-refresh (BUILD_SPEC §4.8): notify file-watch on the resolved source dirs
+            // + 60s interval fallback, debounced, non-overlapping; each fire emits
+            // `usage-updated` to the webview, which silently re-renders in place.
+            start_auto_refresh(&app.handle().clone());
             // TODO(spec §5.2b): after each collect, evaluate the monthly budget and fire
             //   the 80%/100% notification once per calendar month (dedupe in settings.json).
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running munim");
+}
+
+/// Start the auto-refresh machinery (BUILD_SPEC §4.8).
+///
+/// Two independent triggers push a refresh to the webview via the `usage-updated`
+/// Tauri event:
+///   1. A `notify` recursive file-watcher over every AI-tool source dir that exists.
+///      Raw filesystem events are debounced (coalesce bursts: wait ~2s of quiet) so a
+///      chatty tool appending to a JSONL never fires more than ~once per 2s.
+///   2. A 60s interval fallback for filesystems where `notify` misses events.
+///
+/// Everything runs on background threads; setup() is never blocked. The `Watcher`
+/// is moved into the debounce thread (which parks on `recv()`) so it stays alive for
+/// the whole app lifetime. If the watcher can't be created we log and continue — the
+/// interval fallback still keeps the dashboard fresh.
+fn start_auto_refresh(app: &AppHandle) {
+    // Debounce thread: notify events land on `tx`; this thread coalesces bursts and
+    // emits at most one `usage-updated` per quiet window.
+    let (tx, rx) = mpsc::channel::<()>();
+
+    // Build the watcher up front so we can hand its `tx` clone to the notify callback.
+    let watch_tx = tx.clone();
+    let watcher = RecommendedWatcher::new(
+        move |res: notify::Result<notify::Event>| {
+            if res.is_ok() {
+                // Ignore send errors: if the receiver is gone the app is shutting down.
+                let _ = watch_tx.send(());
+            }
+        },
+        notify::Config::default(),
+    );
+
+    match watcher {
+        Ok(mut watcher) => {
+            for dir in source_dirs(app) {
+                // Only watch paths that exist; ignore per-path errors (e.g. permissions).
+                if dir.exists() {
+                    let _ = watcher.watch(&dir, RecursiveMode::Recursive);
+                }
+            }
+
+            let debounce_handle = app.clone();
+            std::thread::spawn(move || {
+                // Move the watcher in so it lives as long as this thread (app lifetime).
+                let _watcher = watcher;
+                // Block until the first event, then drain until 2s of quiet, then fire once.
+                while rx.recv().is_ok() {
+                    while rx.recv_timeout(Duration::from_secs(2)).is_ok() {
+                        // keep draining the burst
+                    }
+                    let _ = debounce_handle.emit("usage-updated", ());
+                }
+            });
+        }
+        Err(e) => {
+            eprintln!("[munim] auto-refresh watcher unavailable: {e}; using interval only");
+        }
+    }
+
+    // Interval fallback: emit every 60s regardless of the watcher.
+    let interval_handle = app.clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(60));
+        let _ = interval_handle.emit("usage-updated", ());
+    });
+}
+
+/// Resolve the AI-tool source directories to watch (BUILD_SPEC §4.1/§4.8): the dotfile
+/// roots under `$HOME` plus the per-editor app-support roots. Returns candidate paths
+/// (existence is checked by the caller before watching).
+fn source_dirs(app: &AppHandle) -> Vec<std::path::PathBuf> {
+    let home = match app.path().home_dir() {
+        Ok(h) => h,
+        Err(_) => return Vec::new(),
+    };
+
+    let dotfiles = [
+        ".claude",
+        ".codex",
+        ".openclaw",
+        ".clawdbot",
+        ".aider",
+        ".continue",
+        ".cursor",
+        ".windsurf",
+        ".cline",
+        ".roo-code",
+    ];
+    let mut dirs: Vec<std::path::PathBuf> = dotfiles.iter().map(|d| home.join(d)).collect();
+
+    // App-support roots differ per OS.
+    let app_support_apps = ["Claude", "Cursor", "Windsurf", "Code"];
+    #[cfg(target_os = "macos")]
+    let support_root = home.join("Library").join("Application Support");
+    #[cfg(not(target_os = "macos"))]
+    let support_root = home.join(".config");
+    for name in app_support_apps {
+        dirs.push(support_root.join(name));
+    }
+
+    dirs
 }
 
 /// Build the system tray (BUILD_SPEC §6.1): status icon + menu-on-click with quick

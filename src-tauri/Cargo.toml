@@ -29,6 +29,9 @@ tauri-plugin-autostart = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Filesystem watcher for auto-refresh (BUILD_SPEC §4.8). Not a Tauri plugin.
+notify = "6"
+
 # Updater is macOS-only in munim (Flatpak owns updates on Linux). See BUILD_SPEC §7.
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-updater = "2"

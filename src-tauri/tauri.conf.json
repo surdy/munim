@@ -7,6 +7,7 @@
     "frontendDist": "../src"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
@@ -16,8 +17,7 @@
         "minWidth": 800,
         "minHeight": 600,
         "center": true,
-        "decorations": false,
-        "transparent": true,
+        "decorations": true,
         "theme": "Dark",
         "titleBarStyle": "Overlay"
       }

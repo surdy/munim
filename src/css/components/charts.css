@@ -1,0 +1,139 @@
+/* Chart Cards — compact, constrained, clean */
+
+.chart-card {
+    background: linear-gradient(135deg, rgba(21, 29, 46, 0.95) 0%, rgba(17, 24, 39, 0.95) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    animation: fadeSlideUp 0.6s ease forwards;
+    animation-delay: 0.25s;
+    opacity: 0;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+    contain: content;
+}
+
+/* Subtle top gradient accent line */
+.chart-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.3), rgba(167, 139, 250, 0.3), transparent);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+.chart-card:hover {
+    border-color: rgba(34, 211, 238, 0.12);
+    background: linear-gradient(135deg, rgba(26, 37, 64, 0.95) 0%, rgba(21, 29, 46, 0.95) 100%);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.chart-card:hover::before {
+    opacity: 1;
+}
+
+.chart-card h3 {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.01em;
+}
+
+.chart-card h3::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 14px;
+    background: linear-gradient(180deg, var(--accent-cyan), var(--accent-violet));
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+/* Full-width bar chart card */
+.chart-card-full {
+    margin-bottom: 16px;
+}
+
+.chart-card-full h3::before {
+    background: linear-gradient(180deg, var(--accent-cyan), var(--accent-blue));
+}
+
+/* Constrain bar chart height */
+.chart-card-full .chart-canvas-wrap {
+    position: relative;
+    height: 260px;
+}
+
+/* Constrain doughnut chart height */
+.chart-card .chart-canvas-wrap {
+    position: relative;
+    height: 220px;
+}
+
+.chart-card canvas {
+    border-radius: 4px;
+}
+
+/* "click bar to filter" hint beside chart title */
+.chart-hint {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+    margin-left: auto;
+    opacity: 0.7;
+}
+
+/* Day filter indicator bar */
+#day-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding: 7px 14px;
+    background: rgba(34, 211, 238, 0.06);
+    border: 1px solid rgba(34, 211, 238, 0.18);
+    border-radius: var(--radius-sm);
+    animation: fadeSlideUp 0.25s ease forwards;
+}
+
+.day-filter-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+
+.day-filter-label strong {
+    color: var(--accent-cyan);
+    font-weight: 600;
+}
+
+.day-filter-clear {
+    margin-left: auto;
+    background: none;
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    border-radius: var(--radius-pill);
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    padding: 3px 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.day-filter-clear:hover {
+    border-color: rgba(34, 211, 238, 0.5);
+    color: var(--accent-cyan);
+    background: rgba(34, 211, 238, 0.06);
+}

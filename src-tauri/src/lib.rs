@@ -6,6 +6,11 @@
 
 mod commands;
 
+use tauri::{
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
+    Emitter,
+};
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
@@ -37,6 +42,58 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
         ])
+        .menu(|handle| {
+            let refresh = MenuItem::with_id(
+                handle,
+                "refresh",
+                "Refresh",
+                true,
+                Some("CmdOrCtrl+R"),
+            )?;
+
+            let app_menu = Submenu::with_items(
+                handle,
+                "munim",
+                true,
+                &[
+                    &PredefinedMenuItem::about(handle, None, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::quit(handle, None)?,
+                ],
+            )?;
+
+            let edit_menu = Submenu::with_items(
+                handle,
+                "Edit",
+                true,
+                &[
+                    &PredefinedMenuItem::copy(handle, None)?,
+                    &PredefinedMenuItem::paste(handle, None)?,
+                ],
+            )?;
+
+            let view_menu = Submenu::with_items(handle, "View", true, &[&refresh])?;
+
+            let window_menu = Submenu::with_items(
+                handle,
+                "Window",
+                true,
+                &[
+                    &PredefinedMenuItem::minimize(handle, None)?,
+                    &PredefinedMenuItem::close_window(handle, None)?,
+                ],
+            )?;
+
+            Menu::with_items(
+                handle,
+                &[&app_menu, &edit_menu, &view_menu, &window_menu],
+            )
+        })
+        .on_menu_event(|app, event| {
+            if event.id() == "refresh" {
+                let _ = app.emit("menu-refresh", ());
+            }
+        })
         .setup(|_app| {
             // TODO(spec §6.1): build the system tray (icon + menu-on-click with quick
             //   stats, Open/Refresh/Launch-at-login/Settings/Quit); close-hides-to-tray.

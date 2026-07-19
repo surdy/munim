@@ -1,0 +1,32 @@
+/* Footer */
+.footer {
+    text-align: center;
+    padding: 24px 0 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+}
+
+.footer-sep {
+    margin: 0 8px;
+    opacity: 0.5;
+}
+
+.footer-coffee {
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.footer-coffee:hover {
+    color: #ffdd00;
+}
+
+.no-data {
+    text-align: center;
+    padding: 48px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+}

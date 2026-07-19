@@ -1,0 +1,41 @@
+# Flatpak manifest for munim (BUILD_SPEC §7, §0.5 #18).
+# munim is packaged as a Flatpak on Linux (not a raw Tauri bundle). Build the Tauri
+# binary first (or a .deb) and have this manifest install it, then export to an OSTree
+# repo published on GitHub Pages for auto-updates.
+#
+# This is a STUB — fill the module sources once the binary/.deb artifact name is known.
+app-id: com.munim.app
+runtime: org.gnome.Platform
+runtime-version: '46'
+sdk: org.gnome.Sdk
+command: munim
+
+finish-args:
+  # System WebView (WebKitGTK) rendering.
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --share=ipc
+  - --device=dri
+  # Read-only access to the whole home dir so every current + future AI-tool data dir
+  # is covered by one grant (BUILD_SPEC §0.5 #18 / §7). Only munim's own data is writable.
+  - --filesystem=home:ro
+  - --filesystem=xdg-data/munim:create
+  - --filesystem=xdg-config/munim:create
+  # Native notifications for budget alerts (via the portal).
+  - --talk-name=org.freedesktop.Notifications
+  # System tray (StatusNotifierItem).
+  - --talk-name=org.kde.StatusNotifierWatcher
+
+modules:
+  - name: munim
+    buildsystem: simple
+    build-commands:
+      # TODO(spec §7): install the prebuilt Tauri binary + .desktop + icons into /app.
+      # e.g. extract the .deb produced by `tauri build`, or copy the raw binary:
+      #   - install -Dm755 munim /app/bin/munim
+      #   - install -Dm644 com.munim.app.desktop /app/share/applications/com.munim.app.desktop
+      #   - install -Dm644 icons/128x128.png /app/share/icons/hicolor/128x128/apps/com.munim.app.png
+      - 'true'
+    sources:
+      # TODO: point at the release artifact (url + sha256), or a local path in CI.
+      []

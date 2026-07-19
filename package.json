@@ -1,0 +1,18 @@
+{
+  "name": "munim",
+  "version": "0.1.0",
+  "description": "Cross-platform AI-coding usage & cost tracker",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  }
+}

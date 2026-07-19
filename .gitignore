@@ -1,0 +1,28 @@
+# Rust / Tauri
+/src-tauri/target/
+/src-tauri/gen/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Build output
+/dist/
+*.dmg
+*.AppImage
+*.flatpak
+
+# Secrets — never commit signing keys
+*.p12
+*.key
+/.tauri/
+updater-private-key*
+
+# OS
+.DS_Store
+
+# munim runtime data (should never live in the repo, but guard anyway)
+/data/
+sessions-cache.json
+scan-index.json
+settings.json

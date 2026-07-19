@@ -1,0 +1,41 @@
+[package]
+name = "munim"
+version = "0.1.0"
+description = "Cross-platform AI-coding usage & cost tracker"
+authors = ["munim contributors"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77"
+
+# The `_lib` crate is what the (optional) mobile entry point links against and keeps
+# the app logic reusable/testable. Desktop `main.rs` just calls `munim_lib::run()`.
+[lib]
+name = "munim_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-autostart = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+walkdir = "2"
+notify = "6"
+chrono = { version = "0.4", features = ["clock"] }
+dirs = "5"
+
+# Updater is macOS-only in munim (Flatpak owns updates on Linux). See BUILD_SPEC §7.
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri-plugin-updater = "2"
+
+[features]
+# default feature set kept empty; wire additional cargo features as needed.
+default = []

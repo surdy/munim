@@ -1,0 +1,127 @@
+# munim pricing tables — USD per 1,000,000 tokens.
+# Edit these rates freely; munim reads this file at startup, no recompile needed.
+# Matching is lowercased-substring and ORDER-SENSITIVE: the first `match` that is a
+# substring of the model id wins. Keep more-specific rows above less-specific ones.
+# See BUILD_SPEC.md §4.5.
+
+# ---- Anthropic / Claude family ----
+[[claude]]
+match = "opus-5"
+input = 20.0
+output = 100.0
+cache_write = 25.0
+cache_read = 2.0
+
+[[claude]]
+match = "opus-4.9"
+input = 5.0
+output = 25.0
+cache_write = 6.25
+cache_read = 0.50
+
+[[claude]]
+match = "opus-4.8"
+input = 5.0
+output = 25.0
+cache_write = 6.25
+cache_read = 0.50
+
+[[claude]]
+match = "opus-4.7"
+input = 5.0
+output = 25.0
+cache_write = 6.25
+cache_read = 0.50
+
+[[claude]]
+match = "opus-4.6"
+input = 5.0
+output = 25.0
+cache_write = 6.25
+cache_read = 0.50
+
+[[claude]]
+match = "opus-4.5"
+input = 5.0
+output = 25.0
+cache_write = 6.25
+cache_read = 0.50
+
+[[claude]]
+match = "opus-4.1"
+input = 15.0
+output = 75.0
+cache_write = 18.75
+cache_read = 1.50
+
+[[claude]]
+match = "opus"
+input = 15.0
+output = 75.0
+cache_write = 18.75
+cache_read = 1.50
+
+[[claude]]
+match = "sonnet"
+input = 3.0
+output = 15.0
+cache_write = 3.75
+cache_read = 0.30
+
+[[claude]]
+match = "haiku-4.5"
+input = 1.0
+output = 5.0
+cache_write = 1.25
+cache_read = 0.10
+
+[[claude]]
+match = "haiku"
+input = 0.25
+output = 1.25
+cache_write = 0.30
+cache_read = 0.03
+
+# Catch-all for unknown Claude models (Sonnet rate).
+[claude_default]
+input = 3.0
+output = 15.0
+cache_write = 3.75
+cache_read = 0.30
+
+# ---- OpenAI / Codex family (cache_write always 0) ----
+[[codex]]
+match = "gpt-5.5"
+input = 5.00
+output = 30.00
+cache_read = 0.50
+
+[[codex]]
+match = "gpt-5.4-mini"
+input = 0.75
+output = 4.50
+cache_read = 0.075
+
+[[codex]]
+match = "gpt-5.4"
+input = 2.50
+output = 15.00
+cache_read = 0.25
+
+[[codex]]
+match = "gpt-5.3-codex"
+input = 1.75
+output = 14.00
+cache_read = 0.175
+
+[[codex]]
+match = "gpt-5.2"
+input = 2.00
+output = 10.00
+cache_read = 0.20
+
+# Catch-all for unknown Codex models (gpt-5.4 rate).
+[codex_default]
+input = 2.50
+output = 15.00
+cache_read = 0.25

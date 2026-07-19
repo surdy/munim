@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>munim</title>
+    <!--
+      PORT TARGET (BUILD_SPEC §5): replace this placeholder with the original dashboard.
+      Copy the original repo's src/dashboard.html body + src/css/** + src/js/** here,
+      VENDOR Chart.js and the fonts locally (no CDN — the CSP will block it), swap the
+      wordmark to "munim", and add the Settings panel + budget UI (BUILD_SPEC §5.2b).
+    -->
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0; height: 100vh; display: grid; place-items: center;
+        background: #0a0e17; color: #e2e8f0;
+        font-family: -apple-system, "SF Pro Display", system-ui, sans-serif;
+      }
+      .card { text-align: center; opacity: 0.85; }
+      h1 { font-weight: 800; letter-spacing: -0.02em; }
+      code { color: #22d3ee; }
+      pre { text-align: left; background:#151d2e; padding:12px 16px; border-radius:8px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>munim</h1>
+      <p>Scaffold placeholder. Port the dashboard here — see <code>BUILD_SPEC.md §5</code>.</p>
+      <pre id="probe">calling get_usage_data()…</pre>
+    </div>
+
+    <script type="module">
+      // Data flow (BUILD_SPEC §3): the frontend pulls data via invoke() on load and
+      // shims the legacy globals the ported dashboard JS expects.
+      import { invoke } from "https://esm.sh/@tauri-apps/api/core"; // TODO: bundle @tauri-apps/api locally
+      try {
+        const data = await invoke("get_usage_data");
+        window.__SUMMARY__ = data.summary ?? {};
+        window.__CLAUDE_SESSIONS__ = data.claude ?? [];
+        window.__CODEX_SESSIONS__ = data.codex ?? [];
+        window.__OPENCLAW_SESSIONS__ = data.openclaw ?? [];
+        document.getElementById("probe").textContent =
+          "get_usage_data() → " + JSON.stringify(data);
+      } catch (e) {
+        document.getElementById("probe").textContent =
+          "invoke not available yet (run under `tauri dev`): " + e;
+      }
+    </script>
+  </body>
+</html>

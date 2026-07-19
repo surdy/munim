@@ -1,0 +1,5 @@
+# Cargo workspace. Pure domain logic lives in `crates/munim-core` (no Tauri dep, so it
+# compiles + tests fast in isolation); `src-tauri` is the thin desktop shell.
+[workspace]
+resolver = "2"
+members = ["crates/munim-core", "src-tauri"]

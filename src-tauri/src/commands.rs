@@ -3,22 +3,40 @@
 //!
 //! All handlers are stubs. Return shapes match what the frontend expects (BUILD_SPEC §3).
 
+use munim_core::{collect, Pricing};
 use serde_json::{json, Value};
+use tauri::{path::BaseDirectory, AppHandle, Manager};
 
-/// Run the collector (incremental) and return the dashboard payload.
+/// Load pricing from the bundled `pricing.toml` resource, falling back to the embedded
+/// default if the resource is missing or unreadable (BUILD_SPEC §4.5).
+fn load_pricing(app: &AppHandle) -> Pricing {
+    if let Ok(path) = app.path().resolve("pricing.toml", BaseDirectory::Resource) {
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            if let Ok(p) = Pricing::load(&text) {
+                return p;
+            }
+        }
+    }
+    Pricing::embedded_default()
+}
+
+/// Run the collector and return the dashboard payload.
 /// Shape: { summary, claude: [...], codex: [...], openclaw: [...] } — see BUILD_SPEC §3/§4.
 #[tauri::command]
-pub async fn get_usage_data() -> Result<Value, String> {
-    // TODO(spec §4): crate::collector::collect() → serialize summary + session arrays.
-    Ok(json!({ "summary": {}, "claude": [], "codex": [], "openclaw": [] }))
+pub async fn get_usage_data(app: AppHandle) -> Result<Value, String> {
+    let home = app.path().home_dir().map_err(|e| e.to_string())?;
+    let pricing = load_pricing(&app);
+    // TODO(#3): move to incremental collect with the scan-index cache; TODO: spawn_blocking
+    // so the file scan doesn't sit on an async worker.
+    let out = collect(&home, &pricing);
+    serde_json::to_value(out).map_err(|e| e.to_string())
 }
 
 /// Force a re-collect (manual refresh: FAB / menu ⌘R / tray "Refresh Now").
 #[tauri::command]
-pub async fn refresh() -> Result<Value, String> {
-    // TODO(spec §4.8): run the same debounced, non-overlapping collect entrypoint,
-    //   then let the caller re-fetch via get_usage_data (or return the payload here).
-    get_usage_data().await
+pub async fn refresh(app: AppHandle) -> Result<Value, String> {
+    // TODO(#6): route through the shared debounced, non-overlapping collect entrypoint.
+    get_usage_data(app).await
 }
 
 /// Export the merged session cache as JSON (native save dialog handled on the JS side

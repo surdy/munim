@@ -1,12 +1,10 @@
 //! munim — Tauri app entry point.
 //!
 //! Wires plugins, the invoke() command bridge, the system tray, and the auto-refresh
-//! watcher. Everything of substance is a stub marked `TODO(spec §…)` — see BUILD_SPEC.md.
+//! watcher. Pure domain logic lives in the `munim-core` crate; this shell stays thin.
+//! Remaining stubs are marked `TODO(spec §…)` — see BUILD_SPEC.md.
 
-mod collector;
 mod commands;
-mod pricing;
-mod settings;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

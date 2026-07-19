@@ -153,3 +153,28 @@ export function updateYesterdayDelta(summary, allSessions) {
         deltaEl.className = 'yesterday-delta delta-down';
     }
 }
+
+// Budget bar (issue #8) — renders spend-vs-budget under the projection line on the THIS
+// MONTH card. The budget lives in window.__SETTINGS__.monthlyBudget (fetched in bootstrap).
+// Amber at >=80%, rose at >=100%; hidden when no budget is set.
+export function renderBudgetBar(summary) {
+    const wrap = document.getElementById('budget-bar');
+    const fill = document.getElementById('budget-bar-fill');
+    const label = document.getElementById('budget-bar-label');
+    if (!wrap || !fill || !label) return;
+
+    const budget = window.__SETTINGS__ && window.__SETTINGS__.monthlyBudget;
+    if (!budget || budget <= 0) {
+        wrap.style.display = 'none';
+        return;
+    }
+
+    const spend = (summary && summary.month_cost) || 0;
+    const pct = Math.round((spend / budget) * 100);
+    fill.style.width = Math.min(pct, 100) + '%';
+    fill.classList.remove('budget-low', 'budget-mid', 'budget-high');
+    fill.classList.add(pct >= 100 ? 'budget-high' : pct >= 80 ? 'budget-mid' : 'budget-low');
+    label.textContent =
+        '$' + spend.toFixed(2) + ' / $' + Math.round(budget).toLocaleString() + ' (' + pct + '%)';
+    wrap.style.display = '';
+}

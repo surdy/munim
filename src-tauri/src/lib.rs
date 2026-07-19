@@ -221,7 +221,7 @@ fn build_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Quick stats: run one collect at startup and format Today / This month. "This week"
     // is left as an em-dash until the live watcher wires it up. If anything fails we fall
     // back to "—" placeholders so the tray still builds.
-    let (today, week, month) = collect_stats(app);
+    let (today, week, month, month_cost) = collect_stats(app);
 
     let stat_today = MenuItem::with_id(
         app,
@@ -245,6 +245,28 @@ fn build_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         None::<&str>,
     )?;
 
+    // Budget line (BUILD_SPEC §6.1 / issue #8): shown only when a monthly budget is set.
+    let budget = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .map(|d| munim_core::settings::load(&d))
+        .and_then(|s| s.monthly_budget)
+        .filter(|b| *b > 0.0);
+    let stat_budget = match budget {
+        Some(b) => {
+            let pct = (month_cost / b * 100.0).round() as i64;
+            Some(MenuItem::with_id(
+                app,
+                "stat_budget",
+                format!("Budget  ${month_cost:.2} / ${b:.0} ({pct}%)"),
+                false,
+                None::<&str>,
+            )?)
+        }
+        None => None,
+    };
+
     let open = MenuItem::with_id(
         app,
         "tray_open_dashboard",
@@ -266,21 +288,23 @@ fn build_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let settings = MenuItem::with_id(app, "tray_settings", "Settings…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
 
-    let menu = Menu::with_items(
-        app,
-        &[
-            &stat_today,
-            &stat_week,
-            &stat_month,
-            &PredefinedMenuItem::separator(app)?,
-            &open,
-            &refresh,
-            &launch,
-            &settings,
-            &PredefinedMenuItem::separator(app)?,
-            &quit,
-        ],
-    )?;
+    let sep_top = PredefinedMenuItem::separator(app)?;
+    let sep_bottom = PredefinedMenuItem::separator(app)?;
+    let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
+        vec![&stat_today, &stat_week, &stat_month];
+    if let Some(ref b) = stat_budget {
+        items.push(b);
+    }
+    items.extend([
+        &sep_top as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
+        &open,
+        &refresh,
+        &launch,
+        &settings,
+        &sep_bottom,
+        &quit,
+    ]);
+    let menu = Menu::with_items(app, &items)?;
 
     // Keep a handle to the checkable item so the toggle can reflect the new state.
     let launch_handle = launch.clone();
@@ -339,17 +363,19 @@ fn build_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Run one collect at startup and return formatted (today, week, month) stat strings.
-/// "This week" is a placeholder until the live watcher wires it up (TODO #6).
-fn collect_stats(app: &tauri::App) -> (String, String, String) {
+/// Run one collect at startup and return formatted (today, week, month) stat strings plus
+/// the raw month-to-date cost (for the budget line). "This week" is a placeholder until the
+/// live watcher wires it up (TODO #6).
+fn collect_stats(app: &tauri::App) -> (String, String, String, f64) {
     let dash = || "—".to_string();
+    let fallback = || (dash(), dash(), dash(), 0.0);
     let home = match app.path().home_dir() {
         Ok(h) => h,
-        Err(_) => return (dash(), dash(), dash()),
+        Err(_) => return fallback(),
     };
     let data_dir = match app.path().app_data_dir() {
         Ok(d) => d,
-        Err(_) => return (dash(), dash(), dash()),
+        Err(_) => return fallback(),
     };
     let _ = std::fs::create_dir_all(&data_dir);
     match munim_core::collect_and_persist(
@@ -362,8 +388,9 @@ fn collect_stats(app: &tauri::App) -> (String, String, String) {
             // TODO(#6): live week cost — collect only exposes today/month today.
             dash(),
             format!("${:.2}", out.summary.month_cost),
+            out.summary.month_cost,
         ),
-        Err(_) => (dash(), dash(), dash()),
+        Err(_) => fallback(),
     }
 }
 

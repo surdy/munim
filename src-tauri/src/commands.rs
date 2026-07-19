@@ -1,7 +1,6 @@
-//! The invoke() bridge — the 5 operations the original exposed via WKScriptMessageHandler
-//! (BUILD_SPEC §6) plus settings get/save for the new settings panel (§5.2b).
-//!
-//! All handlers are stubs. Return shapes match what the frontend expects (BUILD_SPEC §3).
+//! The invoke() bridge — usage data + the operations the original exposed via
+//! WKScriptMessageHandler (export/import/session-detail, BUILD_SPEC §6) plus settings
+//! get/save (§5.2b) and budget-alert evaluation (§5.2b / issue #8).
 
 use munim_core::{collect_and_persist, Pricing};
 use serde_json::{json, Value};
@@ -30,7 +29,48 @@ pub async fn get_usage_data(app: AppHandle) -> Result<Value, String> {
     // Incremental collect + cache persistence (BUILD_SPEC §4.7). TODO(#6): spawn_blocking
     // so the file scan doesn't sit on an async worker.
     let out = collect_and_persist(&home, &pricing, &data_dir).map_err(|e| e.to_string())?;
+    // Budget alerts (BUILD_SPEC §5.2b / issue #8): fire a native 80%/100% notification once
+    // per calendar month. Runs on every load + auto-refresh; dedupe lives in settings.json.
+    evaluate_budget(
+        &app,
+        &data_dir,
+        out.summary.month_cost,
+        &out.summary.current_month,
+    );
     serde_json::to_value(out).map_err(|e| e.to_string())
+}
+
+/// Compare month-to-date spend against the persisted monthly budget and fire one native
+/// notification the first time 80% then 100% is crossed each month (BUILD_SPEC §5.2b).
+fn evaluate_budget(
+    app: &AppHandle,
+    data_dir: &std::path::Path,
+    month_cost: f64,
+    current_month: &str,
+) {
+    let mut s = munim_core::settings::load(data_dir);
+    if s.monthly_budget.map(|b| b <= 0.0).unwrap_or(true) {
+        return; // no budget set
+    }
+    let prev_month = s.alert_month.clone();
+    let fired = s.budget_alert(month_cost, current_month);
+    if let Some(threshold) = fired {
+        use tauri_plugin_notification::NotificationExt;
+        let budget = s.monthly_budget.unwrap_or(0.0);
+        let body =
+            format!("{threshold}% of your ${budget:.0} monthly budget used (${month_cost:.2}).",);
+        let _ = app
+            .notification()
+            .builder()
+            .title("munim")
+            .body(body)
+            .show();
+    }
+    // Persist only when state changed (a threshold fired, or the month rolled over) so
+    // frequent auto-refresh collects don't churn the file.
+    if fired.is_some() || s.alert_month != prev_month {
+        let _ = munim_core::settings::save(data_dir, &s);
+    }
 }
 
 /// Force a re-collect (manual refresh: FAB / menu ⌘R / tray "Refresh Now").

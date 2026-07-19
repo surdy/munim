@@ -154,3 +154,36 @@
     opacity: 0.6;
     width: 100%;
 }
+
+/* Budget bar (issue #8) — shown on the THIS MONTH card when a monthly budget is set. */
+.budget-bar {
+    margin-top: 10px;
+}
+.budget-bar-track {
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(148, 163, 184, 0.15);
+    overflow: hidden;
+}
+.budget-bar-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+.budget-bar-fill.budget-low {
+    background: linear-gradient(90deg, #34d399, #22d3ee);
+}
+.budget-bar-fill.budget-mid {
+    background: linear-gradient(90deg, #fbbf24, #f59e0b);
+}
+.budget-bar-fill.budget-high {
+    background: linear-gradient(90deg, #fb7185, #f43f5e);
+}
+.budget-bar-label {
+    margin-top: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary);
+}

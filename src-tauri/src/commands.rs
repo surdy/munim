@@ -40,35 +40,74 @@ pub async fn refresh(app: AppHandle) -> Result<Value, String> {
     get_usage_data(app).await
 }
 
-/// Export the merged session cache as JSON (native save dialog handled on the JS side
-/// via tauri-plugin-dialog, or return the bytes here).
+/// Show a save dialog and write the exported JSON (already assembled by the frontend).
+/// Returns `{ saved, count }`. BUILD_SPEC §4.7 / issue #9.
 #[tauri::command]
-pub async fn export_data() -> Result<Value, String> {
-    // TODO(spec §4.7): read sessions-cache.json and return it for saving.
-    Ok(json!({ "sessions": [], "format": "munim", "version": 1 }))
+pub async fn export_data(app: AppHandle, json: String) -> Result<Value, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let count = serde_json::from_str::<Value>(&json)
+        .ok()
+        .and_then(|v| {
+            v.get("sessions")
+                .and_then(|s| s.as_array())
+                .map(|a| a.len())
+        })
+        .unwrap_or(0);
+    let file = app
+        .dialog()
+        .file()
+        .add_filter("JSON", &["json"])
+        .set_file_name("munim-usage.json")
+        .blocking_save_file();
+    match file {
+        Some(fp) => {
+            let path = fp.into_path().map_err(|e| e.to_string())?;
+            std::fs::write(&path, json).map_err(|e| e.to_string())?;
+            Ok(json!({ "saved": true, "count": count }))
+        }
+        None => Ok(json!({ "saved": false })),
+    }
 }
 
-/// Parse an imported JSON file (accept both munim and legacy claude-usage-tracker shapes).
+/// Show an open dialog and return the chosen file's raw text (or null if cancelled). The
+/// frontend validates the format and merges. BUILD_SPEC §4.7 / issue #9.
 #[tauri::command]
-pub async fn import_data(_json_text: String) -> Result<Value, String> {
-    // TODO(spec §4.7): validate + normalize (back-fill `provider`), return records to merge.
-    Ok(json!({ "imported": 0, "records": [] }))
+pub async fn import_data(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let file = app
+        .dialog()
+        .file()
+        .add_filter("JSON", &["json"])
+        .blocking_pick_file();
+    match file {
+        Some(fp) => {
+            let path = fp.into_path().map_err(|e| e.to_string())?;
+            let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            Ok(Some(text))
+        }
+        None => Ok(None),
+    }
 }
 
-/// Merge imported records into the cache (dedupe key: provider|source|file|date) and persist.
+/// Persist the frontend-merged records to the session cache (atomic). The frontend already
+/// merged + deduped; we validate + write. BUILD_SPEC §4.7 / issue #9.
 #[tauri::command]
-pub async fn save_imported_data(_records: Value) -> Result<Value, String> {
-    // TODO(spec §4.2/§4.7): merge + atomic-write sessions-cache.json, return merged count.
-    Ok(json!({ "merged": 0 }))
+pub async fn save_imported_data(app: AppHandle, records: Value) -> Result<Value, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    let recs: Vec<munim_core::SessionRecord> =
+        serde_json::from_value(records).map_err(|e| e.to_string())?;
+    munim_core::cache::save_cache(&data_dir, &recs).map_err(|e| e.to_string())?;
+    Ok(json!({ "saved": recs.len() }))
 }
 
 /// Read a single session file for the detail modal's conversation history.
-/// SECURITY (BUILD_SPEC §6): enforce the path allowlist (known tool roots), an 8 MB cap,
-/// a non-directory check, and symlink resolution — reject anything outside the allowlist.
+/// SECURITY (BUILD_SPEC §6): the allowlist + 8 MB cap + non-dir + symlink resolution live in
+/// `munim_core::detail`. Returns the raw file text; the frontend parses it. Issue #10.
 #[tauri::command]
-pub async fn load_session_detail(_file_path: String) -> Result<Value, String> {
-    // TODO(spec §6): validate path against allowlist, size-cap, then parse JSONL → messages.
-    Err("load_session_detail: not implemented".into())
+pub async fn load_session_detail(app: AppHandle, file_path: String) -> Result<String, String> {
+    let home = app.path().home_dir().map_err(|e| e.to_string())?;
+    munim_core::load_session_file(&home, &file_path)
 }
 
 /// Return persisted settings (budget, autostart pref, alert-fired flags). BUILD_SPEC §5.2b.

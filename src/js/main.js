@@ -258,7 +258,7 @@ function initDataTransfer() {
         totalSessionCount = merged.length;
 
         try {
-            window.webkit.messageHandlers.saveImportedData.postMessage(JSON.stringify(merged));
+            window.__munim.saveImportedData(merged);
         } catch {
             // Browser fallback — no persistence.
         }

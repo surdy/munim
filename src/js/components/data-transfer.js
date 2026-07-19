@@ -25,7 +25,7 @@ export function exportData(summary, sessions) {
     const json = JSON.stringify(payload, null, 2);
 
     try {
-        window.webkit.messageHandlers.exportData.postMessage(json);
+        window.__munim.exportData(json);
     } catch {
         const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -63,7 +63,7 @@ export function importData() {
         };
 
         try {
-            window.webkit.messageHandlers.importData.postMessage('');
+            window.__munim.importData();
         } catch {
             delete window._importDataResolver;
             const input = document.createElement('input');

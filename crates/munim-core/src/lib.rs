@@ -6,6 +6,7 @@
 
 pub mod cache;
 pub mod collector;
+pub mod detail;
 pub mod pricing;
 pub mod settings;
 
@@ -13,5 +14,6 @@ pub use cache::collect_and_persist;
 pub use collector::{
     collect, Caches, CollectOutput, CollectResult, Provider, ScanStats, SessionRecord, Summary,
 };
+pub use detail::load_session_file;
 pub use pricing::Pricing;
 pub use settings::Settings;

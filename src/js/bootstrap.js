@@ -35,11 +35,55 @@ function hideSplash() {
     setTimeout(() => splash.remove(), 400);
 }
 
+// Compatibility bridge (issues #9/#10). The original components talked to the native macOS
+// bridge via window.webkit.messageHandlers.*. In a WKWebView that object is READ-ONLY (and
+// Tauri's own IPC lives on it), so we must NOT mutate it. Instead we expose a `window.__munim`
+// namespace and point the (lightly edited) component call-sites at it.
+function installBridge(invoke) {
+    window.__munim = {
+        // Export: frontend passes the assembled JSON; Rust shows a save dialog + writes it.
+        exportData: async (json) => {
+            try {
+                const res = await invoke('export_data', { json });
+                if (res?.saved) {
+                    window._showExportToast?.('Exported ' + (res.count ?? '') + ' sessions');
+                }
+            } catch (e) {
+                console.error('[munim] export failed:', e);
+                window._showExportToast?.('Export failed', true);
+            }
+        },
+        // Import: Rust shows an open dialog + returns the file text; resolve the JS awaiter.
+        importData: async () => {
+            let text = null;
+            try {
+                text = await invoke('import_data');
+            } catch (e) {
+                console.error('[munim] import failed:', e);
+            }
+            window._importDataResolver?.(text || '');
+        },
+        // Persist frontend-merged records to the session cache.
+        saveImportedData: async (records) => {
+            try {
+                await invoke('save_imported_data', { records });
+            } catch (e) {
+                console.error('[munim] saveImportedData failed:', e);
+            }
+        },
+        // Session detail: returns the raw file text (Rust enforces the allowlist).
+        loadSessionDetail: (filePath) => invoke('load_session_detail', { filePath }),
+    };
+}
+
 // Menu "Refresh" (Cmd/Ctrl+R) emits `menu-refresh` from the native shell; the reload FAB
 // falls back to location.reload() on its own. Either way a reload re-runs this bootstrap,
 // which re-invokes get_usage_data (an incremental re-scan).
 if (tauri?.event?.listen) {
     tauri.event.listen('menu-refresh', () => location.reload());
+}
+if (tauri?.core?.invoke) {
+    installBridge(tauri.core.invoke);
 }
 
 await loadUsage();

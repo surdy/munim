@@ -115,9 +115,8 @@ export async function loadSessionConversation(filePath, opts) {
     let errorMessage = null;
 
     try {
-        const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.loadSessionDetail;
-        if (handler && typeof handler.postMessage === 'function') {
-            raw = await handler.postMessage(filePath);
+        if (window.__munim && typeof window.__munim.loadSessionDetail === 'function') {
+            raw = await window.__munim.loadSessionDetail(filePath);
         } else {
             const resp = await fetch('file://' + filePath);
             if (resp.ok) raw = await resp.text();

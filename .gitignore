@@ -30,3 +30,9 @@ settings.json
 
 # Agent worktrees (isolated subagent workspaces)
 .claude/worktrees/
+
+# CI-generated Flatpak staging dir
+/src-tauri/flatpak/staging/
+.flatpak-builder/
+repo/
+build-dir/

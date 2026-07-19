@@ -111,16 +111,55 @@ pub async fn load_session_detail(app: AppHandle, file_path: String) -> Result<St
 }
 
 /// Return persisted settings (budget, autostart pref, alert-fired flags). BUILD_SPEC §5.2b.
+/// The `Settings` struct serializes camelCase (monthlyBudget, launchAtLogin, ...).
 #[tauri::command]
-pub async fn get_settings() -> Result<Value, String> {
-    // TODO(spec §5.2b): crate::settings::load().
-    Ok(json!({ "monthlyBudget": null, "launchAtLogin": false }))
+pub async fn get_settings(app: AppHandle) -> Result<Value, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let settings = munim_core::settings::load(&dir);
+    serde_json::to_value(settings).map_err(|e| e.to_string())
 }
 
-/// Persist settings from the settings panel.
+/// Persist settings from the settings panel. Only `monthlyBudget` and `launchAtLogin` come
+/// from the panel; the alert-fired flags are preserved from disk. If launch-at-login changed,
+/// the autostart plugin is toggled to match. BUILD_SPEC §5.2b.
 #[tauri::command]
-pub async fn save_settings(_settings: Value) -> Result<(), String> {
-    // TODO(spec §5.2b): crate::settings::save(); if launchAtLogin changed, call the
-    //   autostart plugin enable()/disable() and keep the tray checkbox in sync.
+pub async fn save_settings(app: AppHandle, settings: Value) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    // Load existing settings so we preserve the alert-fired flags / alert_month.
+    let mut current = munim_core::settings::load(&dir);
+    let was_launch_at_login = current.launch_at_login;
+
+    // Overwrite only the panel-owned fields. `monthlyBudget` may be a number or null.
+    current.monthly_budget =
+        settings
+            .get("monthlyBudget")
+            .and_then(|v| if v.is_null() { None } else { v.as_f64() });
+    let launch_at_login = settings
+        .get("launchAtLogin")
+        .and_then(Value::as_bool)
+        .unwrap_or(current.launch_at_login);
+    current.launch_at_login = launch_at_login;
+
+    munim_core::settings::save(&dir, &current).map_err(|e| e.to_string())?;
+
+    // Sync the OS autostart state only when the preference actually changed. Errors here
+    // are non-fatal (the pref is still persisted), so we log and continue.
+    if launch_at_login != was_launch_at_login {
+        let autolaunch = app.autolaunch();
+        let result = if launch_at_login {
+            autolaunch.enable()
+        } else {
+            autolaunch.disable()
+        };
+        if let Err(e) = result {
+            eprintln!("munim: failed to update autostart to {launch_at_login}: {e}");
+        }
+    }
+
     Ok(())
 }

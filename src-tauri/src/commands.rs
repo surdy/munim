@@ -3,7 +3,7 @@
 //!
 //! All handlers are stubs. Return shapes match what the frontend expects (BUILD_SPEC §3).
 
-use munim_core::{collect, Pricing};
+use munim_core::{collect_and_persist, Pricing};
 use serde_json::{json, Value};
 use tauri::{path::BaseDirectory, AppHandle, Manager};
 
@@ -25,10 +25,11 @@ fn load_pricing(app: &AppHandle) -> Pricing {
 #[tauri::command]
 pub async fn get_usage_data(app: AppHandle) -> Result<Value, String> {
     let home = app.path().home_dir().map_err(|e| e.to_string())?;
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let pricing = load_pricing(&app);
-    // TODO(#3): move to incremental collect with the scan-index cache; TODO: spawn_blocking
+    // Incremental collect + cache persistence (BUILD_SPEC §4.7). TODO(#6): spawn_blocking
     // so the file scan doesn't sit on an async worker.
-    let out = collect(&home, &pricing);
+    let out = collect_and_persist(&home, &pricing, &data_dir).map_err(|e| e.to_string())?;
     serde_json::to_value(out).map_err(|e| e.to_string())
 }
 

@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     /// Monthly budget in USD; `None` = budget off (no bar, no alerts).
@@ -20,18 +20,6 @@ pub struct Settings {
     pub alerted_80: bool,
     #[serde(default)]
     pub alerted_100: bool,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Settings {
-            monthly_budget: None,
-            launch_at_login: false,
-            alert_month: String::new(),
-            alerted_80: false,
-            alerted_100: false,
-        }
-    }
 }
 
 impl Settings {

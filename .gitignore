@@ -27,3 +27,6 @@ updater-private-key*
 sessions-cache.json
 scan-index.json
 settings.json
+
+# Agent worktrees (isolated subagent workspaces)
+.claude/worktrees/

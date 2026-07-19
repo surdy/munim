@@ -29,7 +29,7 @@ Nothing in the release pipeline works until these exist:
 ## Cutting a release
 
 1. Bump the version in `src-tauri/tauri.conf.json` (and `Cargo.toml` / `package.json` to match).
-2. Add a `<release>` entry to `src-tauri/flatpak/com.munim.app.metainfo.xml`.
+2. Add a `<release>` entry to `src-tauri/flatpak/io.github.surdy.munim.metainfo.xml`.
 3. Tag and push:
    ```bash
    git tag v0.1.0 && git push origin v0.1.0
@@ -45,7 +45,7 @@ Nothing in the release pipeline works until these exist:
 - **Linux**:
   ```bash
   flatpak remote-add --if-not-exists munim https://surdy.github.io/munim/index.flatpakrepo
-  flatpak install munim com.munim.app
+  flatpak install munim io.github.surdy.munim
   ```
 
 ## Status / caveats

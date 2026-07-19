@@ -28,7 +28,7 @@ munim/
     ├── build.rs
     ├── tauri.conf.json
     ├── capabilities/default.json
-    ├── flatpak/com.munim.app.yml   Linux Flatpak manifest (BUILD_SPEC §7)
+    ├── flatpak/io.github.surdy.munim.yml   Linux Flatpak manifest (BUILD_SPEC §7)
     └── src/
         ├── main.rs
         ├── lib.rs             Tauri builder, plugins, tray + watcher setup
@@ -57,7 +57,7 @@ npm run tauri dev     # runs the app (serves ./src, builds src-tauri)
 npm run tauri build   # macOS .dmg / .app
 ```
 
-Linux is packaged as a **Flatpak** (not a raw Tauri bundle) — see `src-tauri/flatpak/com.munim.app.yml` and the CI workflow.
+Linux is packaged as a **Flatpak** (not a raw Tauri bundle) — see `src-tauri/flatpak/io.github.surdy.munim.yml` and the CI workflow.
 
 ## Distribution & updates
 
@@ -65,7 +65,7 @@ Linux is packaged as a **Flatpak** (not a raw Tauri bundle) — see `src-tauri/f
 - **Linux** — Flatpak, auto-updating from a **self-hosted flatpak repo on GitHub Pages**. Users add the remote once:
   ```bash
   flatpak remote-add --if-not-exists munim https://surdy.github.io/munim/index.flatpakrepo
-  flatpak install munim com.munim.app
+  flatpak install munim io.github.surdy.munim
   ```
 
 CI (`.github/workflows/release.yml`) builds both, signs, generates the updater manifest, and publishes.

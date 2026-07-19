@@ -89,8 +89,8 @@ jobs:
           STAGE=src-tauri/flatpak/staging
           mkdir -p "$STAGE"
           cp src-tauri/target/release/munim "$STAGE/munim"
-          cp src-tauri/flatpak/com.munim.app.desktop "$STAGE/"
-          cp src-tauri/flatpak/com.munim.app.metainfo.xml "$STAGE/"
+          cp src-tauri/flatpak/io.github.surdy.munim.desktop "$STAGE/"
+          cp src-tauri/flatpak/io.github.surdy.munim.metainfo.xml "$STAGE/"
           cp src-tauri/icons/128x128.png "$STAGE/128x128.png"
           cp src-tauri/icons/128x128@2x.png "$STAGE/256x256.png"
       # 3) Build the Flatpak into an OSTree repo.
@@ -98,7 +98,7 @@ jobs:
         run: |
           flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
           flatpak-builder --user --install-deps-from=flathub --force-clean \
-            --repo=repo build-dir src-tauri/flatpak/com.munim.app.yml
+            --repo=repo build-dir src-tauri/flatpak/io.github.surdy.munim.yml
           flatpak build-update-repo repo
       # 4) Emit the .flatpakrepo pointer users add once, then publish repo/ to Pages.
       - name: Prepare Pages artifact

@@ -20,7 +20,7 @@ Every decision below is settled — build to these; don't re-open them. The rest
 
 | # | Decision | Choice |
 |---|---|---|
-| 1 | **Product name** | **munim** (bookkeeper). Bundle id `com.munim.app`; app-data dir `munim`. |
+| 1 | **Product name** | **munim** (bookkeeper). Bundle id `io.github.surdy.munim`; app-data dir `munim`. |
 | 2 | **Framework** | **Tauri v2** (Rust core + system WebView). |
 | 3 | **Collector** | **Rust rewrite** of `collect-usage.js` (`serde_json` + `walkdir`). No Node runtime shipped. |
 | 4 | **Frontend** | **Keep vanilla JS + ES modules + Chart.js** — reuse the original dashboard almost as-is; build new settings/budget UI in the same style. |
@@ -376,7 +376,7 @@ Cross-platform (macOS + Linux) **icon + menu on click**, built with Tauri's `Tra
 5. **Refresh + caching.** Wire manual refresh (window FAB, menu, tray) AND **auto-refresh** per §4.8 (`notify` file-watch + 60 s interval fallback, debounced, non-overlapping, silent, pushes to webview + tray). Confirm `sessions-cache.json` + `scan-index.json` incremental behavior works cross-platform (2nd launch fast).
 6. **Settings panel + budget + alerts (§5.2b, §0.5 #10-11).** In-app settings modal (budget, launch-at-login, data, about); `settings.json` persistence; monthly-budget bar on the THIS MONTH card and tray; native 80%/100% notifications with once-per-month dedupe + month rollover.
 7. **Pricing config.** Move all rates into an editable bundled TOML/JSON read at startup; Rust is the sole cost calculator (§4.5).
-8. **Branding.** New munim logo/icon (icns + png tray sizes), wordmark swap in header + loading screen, bundle id `com.munim.app`.
+8. **Branding.** New munim logo/icon (icns + png tray sizes), wordmark swap in header + loading screen, bundle id `io.github.surdy.munim`.
 9. **Packaging + signing.** `tauri build`: macOS `.dmg` universal, **Developer ID signed + notarized**; Linux **Flatpak** (`--filesystem=home:ro`, xdg portals for dialogs/notifications). (Windows deferred.)
 10. **Update channels.** macOS: `tauri-plugin-updater` + minisign keypair, `latest.json`/bundles on GitHub Releases. Linux: CI builds Flatpak → OSTree repo → publish to GitHub Pages remote; updater disabled on Linux. GitHub Actions ties builds + signing + manifest + release together.
 
@@ -394,7 +394,7 @@ Cross-platform (macOS + Linux) **icon + menu on click**, built with Tauri's `Tra
 - Session-detail file reads are constrained to the allowlist + size cap + fs scope (no arbitrary file read).
 - **Settings + budget work**: setting a monthly budget shows the budget bar (card + tray) and, when month spend crosses 80% then 100%, fires exactly one native notification each per calendar month; launch-at-login toggles from both settings and tray and stays in sync; launch-at-login is **off** on a fresh install.
 - **Pricing** is read from the editable config (edit a rate → cost changes on next collect, no recompile).
-- **Branding**: app is named munim end-to-end (window, tray, wordmark, bundle id `com.munim.app`, app-data dir `munim`); fresh logo present at all icon sizes.
+- **Branding**: app is named munim end-to-end (window, tray, wordmark, bundle id `io.github.surdy.munim`, app-data dir `munim`); fresh logo present at all icon sizes.
 - **Updates**: macOS auto-updater detects + installs a newer GitHub release; Linux Flatpak updates from the GitHub Pages remote; no updater code path runs on Linux.
 - **Packaging**: macOS `.dmg` is signed + notarized (launches with no Gatekeeper warning); Linux Flatpak installs and reads `~/.claude` etc. under `home:ro`.
 

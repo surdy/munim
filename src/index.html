@@ -29,6 +29,7 @@
     <link rel="stylesheet" href="css/components/footer.css">
     <link rel="stylesheet" href="css/components/reload-fab.css">
     <link rel="stylesheet" href="css/components/data-transfer.css">
+    <link rel="stylesheet" href="css/components/settings.css">
 
     <!-- Utilities -->
     <link rel="stylesheet" href="css/utilities.css">
@@ -96,6 +97,10 @@
                     <button class="dt-btn dt-btn-import" id="dt-import-btn" type="button" title="Import data from another device">
                         <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                         Import
+                    </button>
+                    <button class="dt-btn dt-btn-settings" id="settings-btn" type="button" title="Settings">
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        Settings
                     </button>
                 </div>
             </div>
@@ -328,6 +333,50 @@
         <span class="fab-tip">Refresh Data <span class="kbd">&#8984;R</span></span>
     </button>
 
+    <!-- Settings panel (BUILD_SPEC §5.2b) — styled like the session detail modal. -->
+    <div id="settings-modal" class="settings-hidden">
+        <div class="settings-overlay" id="settings-overlay"></div>
+        <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+            <div class="settings-header">
+                <h2 class="settings-title" id="settings-title">Settings</h2>
+                <button class="settings-close" id="settings-close" type="button" aria-label="Close settings">&times;</button>
+            </div>
+            <div class="settings-body">
+                <section class="settings-section">
+                    <div class="settings-section-label">Budget</div>
+                    <label class="settings-field">
+                        <span class="settings-field-label">Monthly budget ($)</span>
+                        <input type="number" class="settings-input" id="settings-budget"
+                               min="0" step="1" placeholder="Off" inputmode="decimal" />
+                    </label>
+                    <p class="settings-help">Alerts at 80% and 100% of this month's spend.</p>
+                </section>
+
+                <section class="settings-section">
+                    <div class="settings-section-label">Startup</div>
+                    <label class="settings-toggle">
+                        <input type="checkbox" id="settings-autostart" />
+                        <span class="settings-toggle-text">Launch munim at login</span>
+                    </label>
+                </section>
+
+                <section class="settings-section">
+                    <div class="settings-section-label">About</div>
+                    <div class="settings-about">
+                        <span class="settings-about-name"><span>mun</span>im</span>
+                        <span class="settings-about-meta">MIT ·
+                            <a href="https://github.com/surdy/munim" target="_blank" rel="noopener noreferrer">github.com/surdy/munim</a>
+                        </span>
+                    </div>
+                </section>
+            </div>
+            <div class="settings-footer">
+                <button class="settings-save-btn" id="settings-save" type="button">Save</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="js/bootstrap.js"></script>
+    <script type="module" src="js/settings.js"></script>
 </body>
 </html>

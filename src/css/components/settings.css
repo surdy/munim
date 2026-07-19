@@ -1,0 +1,215 @@
+/* ── Settings panel (BUILD_SPEC §5.2b) ──────────────────────────
+   Modal styled like the Session Detail modal: dark gradient bg,
+   cyan hairline, scale-in, Esc to close. Hidden by default. */
+
+#settings-modal.settings-hidden { display: none; }
+
+.settings-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 900;
+}
+
+.dt-btn-settings:hover {
+    border-color: var(--accent-cyan);
+    color: var(--accent-cyan);
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.1);
+}
+
+.settings-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 460px;
+    max-width: 92vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    background: linear-gradient(135deg, rgba(21, 29, 46, 0.98) 0%, rgba(13, 18, 30, 0.98) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(34, 211, 238, 0.08);
+    z-index: 901;
+    animation: settingsScaleIn 0.2s ease;
+}
+
+@keyframes settingsScaleIn {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settings-panel { animation: none; }
+}
+
+/* Header */
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+}
+
+.settings-title {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.settings-close {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    line-height: 1;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.settings-close:hover { color: var(--text-primary); border-color: var(--text-muted); }
+
+/* Body */
+.settings-body {
+    padding: 20px 24px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+}
+
+.settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.settings-section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent-cyan);
+}
+
+/* Budget field */
+.settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.settings-field-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+
+.settings-input {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px;
+    width: 100%;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.settings-input:focus {
+    outline: none;
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1);
+}
+.settings-input::placeholder { color: var(--text-muted); }
+
+.settings-help {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* Startup toggle */
+.settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.settings-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-cyan);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.settings-toggle-text {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+/* About */
+.settings-about {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.settings-about-name {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 1.1rem;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+}
+.settings-about-name span {
+    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+
+.settings-about-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+.settings-about-meta a { color: var(--accent-cyan); text-decoration: none; }
+.settings-about-meta a:hover { text-decoration: underline; }
+
+/* Footer */
+.settings-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 16px 24px 20px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+}
+
+.settings-save-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--accent-cyan);
+    background: var(--accent-cyan-dim);
+    border: 1px solid rgba(34, 211, 238, 0.2);
+    border-radius: var(--radius-sm);
+    padding: 9px 20px;
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+.settings-save-btn:hover {
+    background: rgba(34, 211, 238, 0.22);
+    border-color: var(--accent-cyan);
+}
+.settings-save-btn:active { transform: scale(0.97); }

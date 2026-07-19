@@ -1,9 +1,11 @@
 # Flatpak manifest for munim (BUILD_SPEC §7, §0.5 #18).
-# munim is packaged as a Flatpak on Linux (not a raw Tauri bundle). Build the Tauri
-# binary first (or a .deb) and have this manifest install it, then export to an OSTree
-# repo published on GitHub Pages for auto-updates.
 #
-# This is a STUB — fill the module sources once the binary/.deb artifact name is known.
+# munim ships as a Flatpak on Linux (not a raw Tauri bundle). CI builds the self-contained
+# release binary (frontend embedded; pricing falls back to the embedded default), stages it
+# with the desktop file + icons + metainfo under `staging/`, then flatpak-builder packages
+# it and exports to an OSTree repo published on GitHub Pages.
+#
+# UNVERIFIED on macOS (flatpak-builder is Linux-only) — validated in CI on ubuntu-latest.
 app-id: com.munim.app
 runtime: org.gnome.Platform
 runtime-version: '46'
@@ -16,26 +18,26 @@ finish-args:
   - --socket=wayland
   - --share=ipc
   - --device=dri
-  # Read-only access to the whole home dir so every current + future AI-tool data dir
-  # is covered by one grant (BUILD_SPEC §0.5 #18 / §7). Only munim's own data is writable.
+  # Read-only access to the whole home dir so every current + future AI-tool data dir is
+  # covered by one grant (BUILD_SPEC §0.5 #18); only munim's own data/config is writable.
   - --filesystem=home:ro
   - --filesystem=xdg-data/munim:create
   - --filesystem=xdg-config/munim:create
   # Native notifications for budget alerts (via the portal).
   - --talk-name=org.freedesktop.Notifications
-  # System tray (StatusNotifierItem).
+  # System tray (StatusNotifierItem / appindicator).
   - --talk-name=org.kde.StatusNotifierWatcher
 
 modules:
   - name: munim
     buildsystem: simple
     build-commands:
-      # TODO(spec §7): install the prebuilt Tauri binary + .desktop + icons into /app.
-      # e.g. extract the .deb produced by `tauri build`, or copy the raw binary:
-      #   - install -Dm755 munim /app/bin/munim
-      #   - install -Dm644 com.munim.app.desktop /app/share/applications/com.munim.app.desktop
-      #   - install -Dm644 icons/128x128.png /app/share/icons/hicolor/128x128/apps/com.munim.app.png
-      - 'true'
+      - install -Dm755 munim /app/bin/munim
+      - install -Dm644 com.munim.app.desktop /app/share/applications/com.munim.app.desktop
+      - install -Dm644 com.munim.app.metainfo.xml /app/share/metainfo/com.munim.app.metainfo.xml
+      - install -Dm644 128x128.png /app/share/icons/hicolor/128x128/apps/com.munim.app.png
+      - install -Dm644 256x256.png /app/share/icons/hicolor/256x256/apps/com.munim.app.png
     sources:
-      # TODO: point at the release artifact (url + sha256), or a local path in CI.
-      []
+      # CI populates `staging/` with the binary, desktop file, metainfo, and icons.
+      - type: dir
+        path: staging

@@ -29,6 +29,7 @@
   "bundle": {
     "active": true,
     "targets": ["dmg", "app"],
+    "createUpdaterArtifacts": true,
     "resources": ["../pricing.toml"],
     "icon": [
       "icons/32x32.png",

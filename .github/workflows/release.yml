@@ -1,14 +1,17 @@
-# munim release pipeline (BUILD_SPEC §0.5 #16-20, §7).
-# STUB: fill in the secrets and TODO steps before first use.
+# munim release pipeline (BUILD_SPEC §7, §0.5 #16–20). Triggers on a v* tag.
 #
 # Two independent update channels by design:
-#   • macOS → signed + notarized .dmg, plus a tauri-updater `latest.json` on the GitHub Release.
-#   • Linux → Flatpak, exported to an OSTree repo published on GitHub Pages.
+#   • macOS → Developer-ID-signed + notarized .dmg, plus a tauri-updater `latest.json`
+#     attached to the GitHub Release (in-app auto-update).
+#   • Linux → Flatpak, exported to an OSTree repo published on GitHub Pages (Flatpak
+#     handles updates there; tauri-updater is disabled on Linux).
 #
-# Required repo secrets:
-#   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
-#   APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID           # Developer ID sign + notarize
-#   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD  # minisign updater key
+# Required repo secrets (see RELEASE.md / issue #14 — none of this runs without them):
+#   Developer ID sign + notarize:
+#     APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+#     APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
+#   Updater signing (minisign):
+#     TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 name: release
 
 on:
@@ -16,21 +19,30 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write # create the GitHub Release + upload assets
+  pages: write # deploy the Flatpak OSTree repo to Pages
+  id-token: write # Pages deployment (OIDC)
+
 jobs:
   macos:
-    name: macOS (dmg + updater manifest)
+    name: macOS (signed dmg + updater)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - run: npm install
-      # Builds, signs, notarizes, produces the .dmg AND the updater signature + latest.json,
-      # and uploads everything to the GitHub Release for this tag.
+      # tauri-action builds the universal .dmg, code-signs + notarizes it (Apple env below),
+      # signs the updater artifact (TAURI_SIGNING_* env), creates a draft GitHub Release for
+      # the tag, and uploads the .dmg + .app.tar.gz + .sig + latest.json to it.
       - uses: tauri-apps/tauri-action@v0
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -42,42 +54,64 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          args: --target universal-apple-darwin
-          # tauri-action attaches artifacts + latest.json to the release.
-          releaseId: ${{ github.event.release.id }}
+          tagName: ${{ github.ref_name }}
+          releaseName: 'munim ${{ github.ref_name }}'
+          releaseDraft: true
+          prerelease: false
           includeUpdaterJson: true
-      # TODO(spec §7): ensure latest.json is uploaded as `latest.json` on the release so the
-      #   updater endpoint (github.com/OWNER/munim/releases/latest/download/latest.json) resolves.
+          args: --target universal-apple-darwin
 
   linux-flatpak:
-    name: Linux (Flatpak → GitHub Pages repo)
+    name: Linux (Flatpak → Pages repo)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # WebKitGTK + build deps for Tauri on Linux.
       - name: Install system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev \
             libayatana-appindicator3-dev librsvg2-dev flatpak flatpak-builder
       - run: npm install
-      # 1) Build the Tauri Linux binary/.deb that the Flatpak manifest installs.
-      - name: Build Tauri binary
-        run: npm run tauri build -- --bundles deb
-      # 2) Build the Flatpak from src-tauri/flatpak/com.munim.app.yml into a local OSTree repo.
+      # 1) Build the self-contained release binary (frontend is embedded; pricing falls back
+      #    to the embedded default). No Tauri bundle — the Flatpak packages the binary.
+      - name: Build binary
+        run: npm run tauri build -- --no-bundle
+      # 2) Stage the files the Flatpak manifest installs.
+      - name: Stage Flatpak inputs
+        run: |
+          STAGE=src-tauri/flatpak/staging
+          mkdir -p "$STAGE"
+          cp src-tauri/target/release/munim "$STAGE/munim"
+          cp src-tauri/flatpak/com.munim.app.desktop "$STAGE/"
+          cp src-tauri/flatpak/com.munim.app.metainfo.xml "$STAGE/"
+          cp src-tauri/icons/128x128.png "$STAGE/128x128.png"
+          cp src-tauri/icons/128x128@2x.png "$STAGE/256x256.png"
+      # 3) Build the Flatpak into an OSTree repo.
       - name: Build Flatpak
         run: |
           flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
-          # TODO(spec §7): wire the built .deb/binary into the manifest sources, then:
-          # flatpak-builder --user --install-deps-from=flathub --repo=repo --force-clean \
-          #   build-dir src-tauri/flatpak/com.munim.app.yml
-      # 3) Publish the OSTree `repo/` to GitHub Pages so users can `flatpak remote-add` it
-      #    and receive auto-updates. Also emit index.flatpakrepo.
-      - name: Publish repo to Pages
+          flatpak-builder --user --install-deps-from=flathub --force-clean \
+            --repo=repo build-dir src-tauri/flatpak/com.munim.app.yml
+          flatpak build-update-repo repo
+      # 4) Emit the .flatpakrepo pointer users add once, then publish repo/ to Pages.
+      - name: Prepare Pages artifact
         run: |
-          echo "TODO(spec §7): flatpak build-update-repo repo/ ; then deploy repo/ to gh-pages"
-      # - uses: actions/deploy-pages@v4   # (configure Pages source = the repo/ artifact)
+          cat > repo/index.flatpakrepo <<EOF
+          [Flatpak Repo]
+          Title=munim
+          Url=https://surdy.github.io/munim/
+          Homepage=https://github.com/surdy/munim
+          Description=munim — AI-coding usage & cost tracker
+          GPGKey=
+          EOF
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: repo
+      - uses: actions/deploy-pages@v4

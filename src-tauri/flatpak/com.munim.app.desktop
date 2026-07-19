@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=munim
+GenericName=AI Usage Tracker
+Comment=Local-first AI-coding usage & cost tracker
+Exec=munim
+Icon=com.munim.app
+Terminal=false
+Categories=Utility;Development;
+Keywords=AI;Claude;Codex;usage;cost;tokens;
+StartupWMClass=munim

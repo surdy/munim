@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.munim.app</id>
+  <name>munim</name>
+  <summary>Local-first AI-coding usage &amp; cost tracker</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="com.github.surdy">
+    <name>munim contributors</name>
+  </developer>
+  <description>
+    <p>
+      munim tracks your AI-coding token usage and dollar cost across many tools
+      (Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Roo, Aider, Continue,
+      OpenClaw, and OpenAI Codex) by reading their local session logs. Everything
+      stays on your machine — no cloud, no accounts, no telemetry.
+    </p>
+    <p>Features a dark interactive dashboard, a system tray, auto-refresh, and a monthly budget with alerts.</p>
+  </description>
+  <launchable type="desktop-id">com.munim.app.desktop</launchable>
+  <url type="homepage">https://github.com/surdy/munim</url>
+  <url type="bugtracker">https://github.com/surdy/munim/issues</url>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2026-07-19" />
+  </releases>
+</component>

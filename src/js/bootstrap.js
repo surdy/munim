@@ -26,6 +26,13 @@ async function loadUsage() {
     } catch (err) {
         console.error('[munim] get_usage_data failed:', err);
     }
+    // Settings power the budget bar (issue #8); refresh alongside usage so the bar stays
+    // current on load and on auto-refresh. Best-effort — absence just hides the bar.
+    try {
+        window.__SETTINGS__ = await tauri.core.invoke('get_settings');
+    } catch (err) {
+        console.error('[munim] get_settings failed:', err);
+    }
 }
 
 function hideSplash() {

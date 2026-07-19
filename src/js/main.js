@@ -15,7 +15,7 @@ import {
     setupFilterListeners
 } from './components/filters.js';
 import { initHeatmap } from './components/heatmap.js';
-import { renderMonthlyProjection, updateYesterdayDelta } from './components/projections.js';
+import { renderMonthlyProjection, updateYesterdayDelta, renderBudgetBar } from './components/projections.js';
 import {
     renderSessionTable,
     setMostExpensive,
@@ -106,6 +106,7 @@ async function loadData() {
         document.getElementById('last-updated').textContent = new Date(summary.generated_at).toLocaleString();
 
         renderMonthlyProjection(summary);
+        renderBudgetBar(summary);
 
         const todayCostEl = document.getElementById('today-cost');
         todayCostEl.dataset.target = summary.today_cost;
@@ -301,6 +302,7 @@ function reRenderDashboard(summary, sessions) {
     document.getElementById('week-cost').textContent = '$' + weekCost.toFixed(2);
 
     renderMonthlyProjection(summary);
+    renderBudgetBar(summary);
     updateYesterdayDelta(summary, sessions);
 
     initFilterDropdowns(sessions);

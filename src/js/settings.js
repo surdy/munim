@@ -55,6 +55,10 @@ function initSettings() {
         try {
             await invoke('save_settings', { settings });
             window._showExportToast?.('Settings saved');
+            // Reflect the new budget in the dashboard immediately (issue #8): update the
+            // cached settings and re-render the budget bar without waiting for a refresh.
+            window.__SETTINGS__ = { ...(window.__SETTINGS__ || {}), ...settings };
+            window.__munimRefresh?.();
         } catch (e) {
             console.error('munim: failed to save settings', e);
             window._showExportToast?.('Failed to save settings', true);

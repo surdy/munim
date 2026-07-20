@@ -1,4 +1,6 @@
-# munim
+<p align="center">
+  <img src="brand/header.svg" alt="munim — who's spending what, across every AI tool" width="720">
+</p>
 
 A local-first, cross-platform (macOS + Linux) tracker for your AI-coding **token usage and dollar cost**. munim auto-discovers session logs from 10+ tools (Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Roo, Aider, Continue, OpenClaw, OpenAI Codex), computes per-model cost, and shows it in a dark interactive dashboard — with a system tray, auto-refresh, and a monthly budget with alerts. No cloud, no accounts, no telemetry.
 

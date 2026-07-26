@@ -8,7 +8,7 @@ mod commands;
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -115,20 +115,37 @@ pub fn run() {
 
 /// Start the auto-refresh machinery (BUILD_SPEC §4.8).
 ///
-/// Two independent triggers push a refresh to the webview via the `usage-updated`
-/// Tauri event:
+/// Two triggers *request* a refresh:
 ///   1. A `notify` recursive file-watcher over every AI-tool source dir that exists.
-///      Raw filesystem events are debounced (coalesce bursts: wait ~2s of quiet) so a
-///      chatty tool appending to a JSONL never fires more than ~once per 2s.
 ///   2. A 60s interval fallback for filesystems where `notify` misses events.
 ///
-/// Everything runs on background threads; setup() is never blocked. The `Watcher`
-/// is moved into the debounce thread (which parks on `recv()`) so it stays alive for
-/// the whole app lifetime. If the watcher can't be created we log and continue — the
+/// Both feed one channel, and a single coalescing thread decides when a `usage-updated`
+/// event actually reaches the webview. It applies a trailing quiet window plus a hard
+/// floor on the emit rate. The quiet window alone is not enough: a live coding session
+/// appends to its JSONL in bursts separated by *more* than the window, so every burst
+/// satisfied it and the dashboard re-rendered every few seconds. The floor is what
+/// bounds the rate — and it has to cover the interval trigger too, or that emits on its
+/// own schedule and reintroduces the bursts.
+///
+/// Everything runs on background threads; setup() is never blocked. The `Watcher` is
+/// moved into the coalescing thread (which parks on `recv()`) so it stays alive for the
+/// whole app lifetime. If the watcher can't be created we log and continue — the
 /// interval fallback still keeps the dashboard fresh.
 fn start_auto_refresh(app: &AppHandle) {
-    // Debounce thread: notify events land on `tx`; this thread coalesces bursts and
-    // emits at most one `usage-updated` per quiet window.
+    /// Trailing quiet window: how long the filesystem must go silent before a burst is
+    /// considered finished.
+    const QUIET_WINDOW: Duration = Duration::from_secs(2);
+    /// Hard floor between two emits. Requests that arrive inside the floor are folded into
+    /// the next one rather than dropped, so nothing is missed — it just arrives with the
+    /// following tick.
+    const MIN_EMIT_INTERVAL: Duration = Duration::from_secs(15);
+    /// Fallback cadence for filesystems where `notify` misses events.
+    const FALLBACK_INTERVAL: Duration = Duration::from_secs(60);
+
+    // Both triggers are *requests* on this channel; the coalescing thread below is the
+    // only thing that emits. Keeping the rate limit in one place matters — when the
+    // interval emitted on its own it could land seconds after a watcher emit and
+    // reintroduce exactly the burst the floor exists to prevent.
     let (tx, rx) = mpsc::channel::<()>();
 
     // Build the watcher up front so we can hand its `tx` clone to the notify callback.
@@ -143,7 +160,9 @@ fn start_auto_refresh(app: &AppHandle) {
         notify::Config::default(),
     );
 
-    match watcher {
+    // `None` when the watcher can't be created; the interval fallback still drives
+    // refreshes on its own.
+    let watcher = match watcher {
         Ok(mut watcher) => {
             for dir in source_dirs(app) {
                 // Only watch paths that exist; ignore per-path errors (e.g. permissions).
@@ -151,30 +170,53 @@ fn start_auto_refresh(app: &AppHandle) {
                     let _ = watcher.watch(&dir, RecursiveMode::Recursive);
                 }
             }
-
-            let debounce_handle = app.clone();
-            std::thread::spawn(move || {
-                // Move the watcher in so it lives as long as this thread (app lifetime).
-                let _watcher = watcher;
-                // Block until the first event, then drain until 2s of quiet, then fire once.
-                while rx.recv().is_ok() {
-                    while rx.recv_timeout(Duration::from_secs(2)).is_ok() {
-                        // keep draining the burst
-                    }
-                    let _ = debounce_handle.emit("usage-updated", ());
-                }
-            });
+            Some(watcher)
         }
         Err(e) => {
             eprintln!("[munim] auto-refresh watcher unavailable: {e}; using interval only");
+            None
         }
-    }
+    };
 
-    // Interval fallback: emit every 60s regardless of the watcher.
-    let interval_handle = app.clone();
+    // Coalescing thread. Owns the watcher so it lives for the whole app lifetime.
+    let emit_handle = app.clone();
+    std::thread::spawn(move || {
+        let _watcher = watcher;
+        let mut last_emit: Option<Instant> = None;
+
+        // Block until something asks for a refresh, drain until things go quiet, then
+        // hold off until the rate floor has passed before emitting once.
+        while rx.recv().is_ok() {
+            while rx.recv_timeout(QUIET_WINDOW).is_ok() {
+                // keep draining the burst
+            }
+
+            if let Some(prev) = last_emit {
+                let elapsed = prev.elapsed();
+                if elapsed < MIN_EMIT_INTERVAL {
+                    // Keep draining while we wait out the floor, so anything that lands in
+                    // the meantime is covered by the emit below.
+                    let deadline = Instant::now() + (MIN_EMIT_INTERVAL - elapsed);
+                    while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+                        if rx.recv_timeout(remaining).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            last_emit = Some(Instant::now());
+            let _ = emit_handle.emit("usage-updated", ());
+        }
+    });
+
+    // Interval fallback: request a refresh every 60s and let the thread above decide when
+    // it actually goes out.
     std::thread::spawn(move || loop {
-        std::thread::sleep(Duration::from_secs(60));
-        let _ = interval_handle.emit("usage-updated", ());
+        std::thread::sleep(FALLBACK_INTERVAL);
+        if tx.send(()).is_err() {
+            break;                      // receiver gone: app is shutting down
+        }
     });
 }
 

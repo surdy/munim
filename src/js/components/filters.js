@@ -136,14 +136,24 @@ export function updateFilterCount(shown, total) {
     }
 }
 
+function chipAttr(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 export function renderFilterChips(filters) {
     const container = document.getElementById('filter-chips');
     let html = '';
 
+    // Chips carry their removal intent in data-* attributes; a delegated listener on the
+    // container handles the clicks (inline on* handlers are blocked by the app CSP).
     filters.sources.forEach(source => {
         html += `<span class="filter-chip chip-source">
             Source: ${source}
-            <span class="chip-remove" onclick="removeSourceFilter('${source.replace(/'/g, "\\'")}')">&times;</span>
+            <span class="chip-remove" data-remove="source" data-value="${chipAttr(source)}">&times;</span>
         </span>`;
     });
 
@@ -151,28 +161,28 @@ export function renderFilterChips(filters) {
         const mi = getModelInfo(model);
         html += `<span class="filter-chip chip-model">
             Model: ${mi.name}
-            <span class="chip-remove" onclick="removeModelFilter('${model.replace(/'/g, "\\'")}')">&times;</span>
+            <span class="chip-remove" data-remove="model" data-value="${chipAttr(model)}">&times;</span>
         </span>`;
     });
 
     if (filters.dateFrom) {
         html += `<span class="filter-chip chip-date">
             From: ${filters.dateFrom}
-            <span class="chip-remove" onclick="removeDateFromFilter()">&times;</span>
+            <span class="chip-remove" data-remove="date-from">&times;</span>
         </span>`;
     }
 
     if (filters.dateTo) {
         html += `<span class="filter-chip chip-date">
             To: ${filters.dateTo}
-            <span class="chip-remove" onclick="removeDateToFilter()">&times;</span>
+            <span class="chip-remove" data-remove="date-to">&times;</span>
         </span>`;
     }
 
     if (filters.minCost !== null) {
         html += `<span class="filter-chip chip-cost">
             Min: $${filters.minCost.toFixed(2)}
-            <span class="chip-remove" onclick="removeMinCostFilter()">&times;</span>
+            <span class="chip-remove" data-remove="min-cost">&times;</span>
         </span>`;
     }
 
@@ -258,8 +268,15 @@ function setupProviderPills(applyFiltersCallback, onProviderChange) {
     container._pillHandler = handler;
 }
 
+let _staticListenersBound = false;
+
 export function setupFilterListeners(applyFiltersCallback, onProviderChange) {
+    // Re-runs on every re-render (import merge, auto-refresh). The pills rebind safely,
+    // but everything below binds once — duplicates made the dropdown buttons no-ops
+    // (two handlers = open then immediately close).
     setupProviderPills(applyFiltersCallback, onProviderChange);
+    if (_staticListenersBound) return;
+    _staticListenersBound = true;
 
     const sourceBtn = document.getElementById('source-filter-btn');
     const sourceDropdown = document.getElementById('source-dropdown');
@@ -310,6 +327,23 @@ export function setupFilterListeners(applyFiltersCallback, onProviderChange) {
         clearAllFilters();
         applyFiltersCallback();
     });
+
+    const chips = document.getElementById('filter-chips');
+    if (chips) {
+        chips.addEventListener('click', (e) => {
+            const btn = e.target.closest('.chip-remove[data-remove]');
+            if (!btn) return;
+            switch (btn.dataset.remove) {
+                case 'source': removeSourceFilter(btn.dataset.value); break;
+                case 'model': removeModelFilter(btn.dataset.value); break;
+                case 'date-from': removeDateFromFilter(); break;
+                case 'date-to': removeDateToFilter(); break;
+                case 'min-cost': removeMinCostFilter(); break;
+                default: return;
+            }
+            applyFiltersCallback();
+        });
+    }
 }
 
 export function closeAllDropdowns() {
@@ -317,27 +351,3 @@ export function closeAllDropdowns() {
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('open'));
 }
 
-window.removeSourceFilter = function(source) {
-    removeSourceFilter(source);
-    if (window._applyFiltersCallback) window._applyFiltersCallback();
-};
-
-window.removeModelFilter = function(model) {
-    removeModelFilter(model);
-    if (window._applyFiltersCallback) window._applyFiltersCallback();
-};
-
-window.removeDateFromFilter = function() {
-    removeDateFromFilter();
-    if (window._applyFiltersCallback) window._applyFiltersCallback();
-};
-
-window.removeDateToFilter = function() {
-    removeDateToFilter();
-    if (window._applyFiltersCallback) window._applyFiltersCallback();
-};
-
-window.removeMinCostFilter = function() {
-    removeMinCostFilter();
-    if (window._applyFiltersCallback) window._applyFiltersCallback();
-};

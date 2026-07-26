@@ -7,17 +7,44 @@ import { loadSessionConversation } from '../utils/session-detail-loader.js';
 let mostExpensiveFile = null;
 let mostExpensiveDate = null;
 
-let _sessionDetailStore = [];
+// Keyed by a stable per-session identity rather than by array position. Incremental
+// re-renders rebuild only the days that actually changed, and a positional index would
+// either go stale or grow without bound as those rebuilds re-register their rows.
+// Re-registering a session overwrites its entry, so the store stays bounded by the
+// number of distinct sessions no matter how often a day is patched.
+const _sessionDetailStore = new Map();
 const _builtDays = new Set();
 let _daySessionsMap = {};
 
 export function resetSessionStore() {
-    _sessionDetailStore = [];
+    _sessionDetailStore.clear();
 }
 
-export function pushToSessionStore(session) {
-    _sessionDetailStore.push(session);
-    return _sessionDetailStore.length - 1;
+export function registerSession(session) {
+    const id = session.sessionId || session.filePath || session.file || 'unknown';
+    const key = `${session.provider || 'claude'}|${id}|${session.date || ''}|${session.time || ''}`;
+    _sessionDetailStore.set(key, session);
+    return key;
+}
+
+// \u0001 / \u0002 are the ASCII unit/record separators. They cannot occur in any of the
+// fields below, so the joined signature is unambiguous.
+const FIELD_SEP = '\u0001';
+const RECORD_SEP = '\u0002';
+
+// Every field the day/project detail rows render. Two renders with equal signatures
+// produce byte-identical markup, which is what lets an unchanged day be skipped outright.
+export function sessionsSignature(list) {
+    const parts = [String(list.length)];
+    for (const x of list) {
+        parts.push([
+            x.sessionId || x.file || '', x.date || '', x.time || '',
+            x.source || '', x.model || '', x.cost,
+            x.input_tokens || 0, x.output_tokens || 0, x.cache_read || 0, x.cache_write || 0,
+            x.title || '', x.cwd || '',
+        ].join(FIELD_SEP));
+    }
+    return parts.join(RECORD_SEP);
 }
 
 export function setMostExpensive(file, date) {
@@ -25,27 +52,100 @@ export function setMostExpensive(file, date) {
     mostExpensiveDate = date;
 }
 
+function aggregate(list) {
+    let cost = 0, input = 0, output = 0, cacheRead = 0, cacheWrite = 0;
+    const modelSet = new Set();
+    for (const x of list) {
+        cost += x.cost;
+        input += x.input_tokens || 0;
+        output += x.output_tokens || 0;
+        cacheRead += x.cache_read || 0;
+        cacheWrite += x.cache_write || 0;
+        if (x.model) modelSet.add(x.model);
+    }
+    return { cost, input, output, cacheRead, cacheWrite, count: list.length, models: [...modelSet] };
+}
+
+// Cells only — the caller owns the <tr>, so patching a day in place preserves its id,
+// data-day and `expanded` class (and therefore the open detail panel below it).
+function dayRowCells(date, agg) {
+    const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const modelBadges = agg.models.map(m => {
+        const mi = getModelInfo(m);
+        return `<span class="model-badge ${mi.cls}">${mi.name}</span>`;
+    }).join(' ');
+
+    return `<td><span class="chevron">▶</span>${dateLabel}</td>
+                <td>${agg.count}</td>
+                <td>${modelBadges}</td>
+                <td class="token-cell">${formatNumber(agg.input)}</td>
+                <td class="token-cell">${formatNumber(agg.output)}</td>
+                <td class="token-cell">${formatNumber(agg.cacheRead)}</td>
+                <td class="token-cell">${formatNumber(agg.cacheWrite)}</td>
+                <td style="text-align:right"><span class="cost-badge ${costClass(agg.cost)}">$${agg.cost.toFixed(2)}</span></td>`;
+}
+
+function weekRowCells(weekStart, agg) {
+    return `<td colspan="8">
+                <div class="week-strip">
+                    <div class="week-strip-left">
+                        <span class="week-strip-icon">Σ</span>
+                        <span class="week-strip-label">${formatWeekLabel(weekStart)}</span>
+                    </div>
+                    <div class="week-strip-stats">
+                        <span class="week-stat"><span class="week-stat-label">Sessions</span><span class="week-stat-value">${agg.count}</span></span>
+                        <span class="week-stat-divider"></span>
+                        <span class="week-stat"><span class="week-stat-label">In</span><span class="week-stat-value">${formatNumber(agg.input)}</span></span>
+                        <span class="week-stat"><span class="week-stat-label">Out</span><span class="week-stat-value">${formatNumber(agg.output)}</span></span>
+                        <span class="week-stat-divider"></span>
+                        <span class="week-strip-cost">$${agg.cost.toFixed(2)}</span>
+                    </div>
+                </div>
+            </td>`;
+}
+
+// Lazily materialize a day's detail markup the first time it is opened.
+function buildDayDetailOnce(date, detailWrapper) {
+    if (!_builtDays.has(date) && _daySessionsMap[date]) {
+        detailWrapper.innerHTML = buildDayDetail(date, _daySessionsMap[date]);
+        _builtDays.add(date);
+    }
+}
+
+function setCostBarWidths(detailWrapper) {
+    detailWrapper.querySelectorAll('.cost-bar-fill').forEach(bar => {
+        bar.style.transform = `scaleX(${parseFloat(bar.dataset.width) / 100})`;
+    });
+}
+
+// `animate: false` is for state restored after a silent re-render. The detail markup is
+// rebuilt from scratch every time, so without this the source cards replay their
+// fade-in and the cost bars re-grow from zero on every auto-refresh — a visible flash on
+// a row the user never touched. Suppressed via CSS (.no-intro) so the restored rows just
+// stay as they were.
+function expandDay(date, row, detailWrapper, { animate = true } = {}) {
+    if (!animate) detailWrapper.classList.add('no-intro');
+    buildDayDetailOnce(date, detailWrapper);
+    row.classList.add('expanded');
+    detailWrapper.classList.add('open');
+
+    if (animate) {
+        setTimeout(() => setCostBarWidths(detailWrapper), 50);
+    } else {
+        setCostBarWidths(detailWrapper);
+    }
+}
+
 export function toggleDay(date) {
     const row = document.getElementById('day-' + date);
     const detailWrapper = document.getElementById('detail-wrapper-' + date);
+    if (!row || !detailWrapper) return;
 
     if (row.classList.contains('expanded')) {
         row.classList.remove('expanded');
         detailWrapper.classList.remove('open');
     } else {
-        if (!_builtDays.has(date) && _daySessionsMap[date]) {
-            detailWrapper.innerHTML = buildDayDetail(date, _daySessionsMap[date]);
-            _builtDays.add(date);
-        }
-
-        row.classList.add('expanded');
-        detailWrapper.classList.add('open');
-
-        setTimeout(() => {
-            detailWrapper.querySelectorAll('.cost-bar-fill').forEach(bar => {
-                bar.style.transform = `scaleX(${parseFloat(bar.dataset.width) / 100})`;
-            });
-        }, 50);
+        expandDay(date, row, detailWrapper);
     }
 
     const anyExpanded = document.querySelectorAll('.day-row.expanded').length > 0;
@@ -66,19 +166,7 @@ export function toggleAllDays() {
 
         setTimeout(() => {
             if (shouldExpand && !row.classList.contains('expanded')) {
-                if (!_builtDays.has(date) && _daySessionsMap[date]) {
-                    detailWrapper.innerHTML = buildDayDetail(date, _daySessionsMap[date]);
-                    _builtDays.add(date);
-                }
-
-                row.classList.add('expanded');
-                detailWrapper.classList.add('open');
-
-                setTimeout(() => {
-                    detailWrapper.querySelectorAll('.cost-bar-fill').forEach(bar => {
-                        bar.style.transform = `scaleX(${parseFloat(bar.dataset.width) / 100})`;
-                    });
-                }, 50);
+                expandDay(date, row, detailWrapper);
             } else if (!shouldExpand && row.classList.contains('expanded')) {
                 row.classList.remove('expanded');
                 detailWrapper.classList.remove('open');
@@ -191,8 +279,8 @@ export function buildDayDetail(date, sessions) {
         const sc = sourceClass(s.source);
         const isExpensive = (s.file === mostExpensiveFile && date === mostExpensiveDate);
         const titleText = s.title ? s.title.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : '—';
-        const sessionIdx = pushToSessionStore(s);
-        subTableHTML += `<tr class="session-clickable${isExpensive ? ' expensive-session-row' : ''}" onclick="showSessionDetail(${sessionIdx})">
+        const sessionKey = registerSession(s);
+        subTableHTML += `<tr class="session-clickable${isExpensive ? ' expensive-session-row' : ''}" data-session-key="${escapeHTML(sessionKey)}">
             <td style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;">${s.time || '—'}</td>
             <td class="session-title-cell" title="${titleText}">${titleText}</td>
             <td><span class="source-badge source-${sc}">${s.source}</span></td>
@@ -213,114 +301,171 @@ export function buildDayDetail(date, sessions) {
         </div>`;
 }
 
-export function renderSessionTable(sessions) {
-    resetSessionStore();
-    _builtDays.clear();
+// Last rendered shape, so a re-render can tell what (if anything) actually moved.
+// `structureKey` covers which weeks/days exist and in what order; a change there means
+// rows appear, vanish or reorder, so we fall back to rebuilding the whole tbody.
+let _tableState = null;
 
+function tableGroups(sessions) {
     const byDate = {};
-    sessions.forEach(s => {
+    for (const s of sessions) {
         if (!byDate[s.date]) byDate[s.date] = [];
         byDate[s.date].push(s);
-    });
-    _daySessionsMap = byDate;
-
-    const sortedDates = Object.keys(byDate).sort().reverse();
-
-    const tbody = document.getElementById('sessions-body');
-    if (sortedDates.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="no-data">No sessions match the current filters.</td></tr>';
-        updateTotalsRow([]);
-        return;
     }
 
+    const sortedDates = Object.keys(byDate).sort().reverse();
     const weekGroups = {};
     for (const date of sortedDates) {
         const ws = getWeekStart(date);
         if (!weekGroups[ws]) weekGroups[ws] = [];
         weekGroups[ws].push(date);
     }
-
     const sortedWeeks = Object.keys(weekGroups).sort().reverse();
 
-    let html = '';
+    const dayAggs = new Map();
+    const daySigs = new Map();
+    for (const date of sortedDates) {
+        dayAggs.set(date, aggregate(byDate[date]));
+        daySigs.set(date, sessionsSignature(byDate[date]));
+    }
+
+    const weekAggs = new Map();
+    const weekSigs = new Map();
     for (const weekStart of sortedWeeks) {
-        const weekDates = weekGroups[weekStart];
+        const agg = { cost: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, count: 0, models: [] };
+        for (const date of weekGroups[weekStart]) {
+            const d = dayAggs.get(date);
+            agg.cost += d.cost;
+            agg.input += d.input;
+            agg.output += d.output;
+            agg.cacheRead += d.cacheRead;
+            agg.cacheWrite += d.cacheWrite;
+            agg.count += d.count;
+        }
+        weekAggs.set(weekStart, agg);
+        weekSigs.set(weekStart, [
+            agg.count, agg.input, agg.output, agg.cacheRead, agg.cacheWrite, agg.cost,
+        ].join(FIELD_SEP));
+    }
 
-        let weekTotalCost = 0;
-        let weekTotalInput = 0;
-        let weekTotalOutput = 0;
-        let weekTotalCacheRead = 0;
-        let weekTotalCacheWrite = 0;
-        let weekTotalSessions = 0;
-        const weekModels = new Set();
+    // The most-expensive marker decorates one detail row, so a change to it has to
+    // invalidate the whole table rather than just the day whose numbers moved.
+    const structureKey = JSON.stringify({
+        weeks: sortedWeeks.map(w => [w, weekGroups[w]]),
+        expensive: [mostExpensiveFile, mostExpensiveDate],
+    });
 
-        for (const date of weekDates) {
-            const daySessions = byDate[date];
-            let dayCost = 0, dayInput = 0, dayOutput = 0, dayCacheRead = 0, dayCacheWrite = 0;
-            const modelSet = new Set();
-            for (const x of daySessions) {
-                dayCost += x.cost;
-                dayInput += x.input_tokens || 0;
-                dayOutput += x.output_tokens || 0;
-                dayCacheRead += x.cache_read || 0;
-                dayCacheWrite += x.cache_write || 0;
-                if (x.model) modelSet.add(x.model);
-            }
-            const models = [...modelSet];
-            const modelBadges = models.map(m => {
-                const mi = getModelInfo(m);
-                return `<span class="model-badge ${mi.cls}">${mi.name}</span>`;
-            }).join(' ');
+    return { byDate, sortedDates, weekGroups, sortedWeeks, dayAggs, daySigs, weekAggs, weekSigs, structureKey };
+}
 
-            weekTotalCost += dayCost;
-            weekTotalInput += dayInput;
-            weekTotalOutput += dayOutput;
-            weekTotalCacheRead += dayCacheRead;
-            weekTotalCacheWrite += dayCacheWrite;
-            weekTotalSessions += daySessions.length;
-            models.forEach(m => weekModels.add(m));
+// Re-render only the days and week strips whose numbers moved. Rows left alone keep their
+// DOM untouched, so an open detail panel, its painted cost bars and the scroll position
+// all survive. Returns false if the DOM isn't the shape we recorded, so the caller can
+// fall back to a full rebuild.
+function patchSessionTable(g, changedDays, changedWeeks) {
+    for (const date of changedDays) {
+        const row = document.getElementById('day-' + date);
+        if (!row) return false;
+        row.innerHTML = dayRowCells(date, g.dayAggs.get(date));
 
-            const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        // Only days whose detail is already materialized need their panel refreshed;
+        // the rest rebuild lazily from _daySessionsMap the next time they're opened.
+        if (_builtDays.has(date)) {
+            const wrapper = document.getElementById('detail-wrapper-' + date);
+            if (!wrapper) return false;
+            // This is a background update, so suppress the source-card intro even if the
+            // user had opened this row by hand (which leaves .no-intro off).
+            wrapper.classList.add('no-intro');
+            wrapper.innerHTML = buildDayDetail(date, g.byDate[date]);
+            setCostBarWidths(wrapper);
+        }
+    }
 
-            html += `<tr class="day-row" id="day-${date}" onclick="toggleDay('${date}')">
-                <td><span class="chevron">\u25B6</span>${dateLabel}</td>
-                <td>${daySessions.length}</td>
-                <td>${modelBadges}</td>
-                <td class="token-cell">${formatNumber(dayInput)}</td>
-                <td class="token-cell">${formatNumber(dayOutput)}</td>
-                <td class="token-cell">${formatNumber(dayCacheRead)}</td>
-                <td class="token-cell">${formatNumber(dayCacheWrite)}</td>
-                <td style="text-align:right"><span class="cost-badge ${costClass(dayCost)}">$${dayCost.toFixed(2)}</span></td>
-            </tr>`;
+    for (const weekStart of changedWeeks) {
+        const row = document.getElementById('week-' + weekStart);
+        if (!row) return false;
+        row.innerHTML = weekRowCells(weekStart, g.weekAggs.get(weekStart));
+    }
 
+    return true;
+}
+
+export function renderSessionTable(sessions) {
+    const tbody = document.getElementById('sessions-body');
+    const g = tableGroups(sessions);
+
+    if (g.sortedDates.length === 0) {
+        resetSessionStore();
+        _builtDays.clear();
+        _daySessionsMap = g.byDate;
+        _tableState = null;
+        tbody.innerHTML = '<tr><td colspan="8" class="no-data">No sessions match the current filters.</td></tr>';
+        updateTotalsRow([]);
+        updateToggleAllButton(false);
+        return;
+    }
+
+    // Fast paths. A silent auto-refresh normally changes one day (today) or nothing at
+    // all; rebuilding the entire tbody for that is what made expanded rows collapse,
+    // flash, and lose their place. The getElementById guard also catches the case where
+    // the projects view owns the tbody, in which case we must do a full rebuild.
+    if (_tableState
+        && _tableState.structureKey === g.structureKey
+        && document.getElementById('day-' + g.sortedDates[0])) {
+
+        const changedDays = g.sortedDates.filter(d => _tableState.days.get(d) !== g.daySigs.get(d));
+        const changedWeeks = g.sortedWeeks.filter(w => _tableState.weeks.get(w) !== g.weekSigs.get(w));
+
+        // Sessions are re-registered per day as details are rebuilt, so the store only
+        // needs the fresh objects for days we touch.
+        _daySessionsMap = g.byDate;
+
+        if (changedDays.length === 0 && changedWeeks.length === 0) {
+            updateTotalsRow(sessions);
+            return;                                     // nothing moved — touch nothing
+        }
+
+        if (patchSessionTable(g, changedDays, changedWeeks)) {
+            _tableState = { structureKey: g.structureKey, days: g.daySigs, weeks: g.weekSigs };
+            updateTotalsRow(sessions);
+            return;
+        }
+        // DOM didn't match what we recorded — fall through and rebuild from scratch.
+    }
+
+    // Full rebuild. Remember which days were open so they can be restored afterwards.
+    const wasExpanded = new Set(
+        Array.from(document.querySelectorAll('.day-row.expanded')).map(r => r.dataset.day)
+    );
+
+    resetSessionStore();
+    _builtDays.clear();
+    _daySessionsMap = g.byDate;
+
+    let html = '';
+    for (const weekStart of g.sortedWeeks) {
+        for (const date of g.weekGroups[weekStart]) {
+            html += `<tr class="day-row" id="day-${date}" data-day="${date}">${dayRowCells(date, g.dayAggs.get(date))}</tr>`;
             html += `<tr class="day-detail-row"><td colspan="8">
                 <div class="day-detail-wrapper" id="detail-wrapper-${date}"></div>
             </td></tr>`;
         }
-
-        const weekLabel = formatWeekLabel(weekStart);
-        html += `<tr class="week-row">
-            <td colspan="8">
-                <div class="week-strip">
-                    <div class="week-strip-left">
-                        <span class="week-strip-icon">\u03A3</span>
-                        <span class="week-strip-label">${weekLabel}</span>
-                    </div>
-                    <div class="week-strip-stats">
-                        <span class="week-stat"><span class="week-stat-label">Sessions</span><span class="week-stat-value">${weekTotalSessions}</span></span>
-                        <span class="week-stat-divider"></span>
-                        <span class="week-stat"><span class="week-stat-label">In</span><span class="week-stat-value">${formatNumber(weekTotalInput)}</span></span>
-                        <span class="week-stat"><span class="week-stat-label">Out</span><span class="week-stat-value">${formatNumber(weekTotalOutput)}</span></span>
-                        <span class="week-stat-divider"></span>
-                        <span class="week-strip-cost">$${weekTotalCost.toFixed(2)}</span>
-                    </div>
-                </div>
-            </td>
-        </tr>`;
+        html += `<tr class="week-row" id="week-${weekStart}">${weekRowCells(weekStart, g.weekAggs.get(weekStart))}</tr>`;
     }
     tbody.innerHTML = html;
+
+    let restored = 0;
+    for (const date of wasExpanded) {
+        const row = document.getElementById('day-' + date);
+        const detailWrapper = document.getElementById('detail-wrapper-' + date);
+        if (!row || !detailWrapper) continue;   // day filtered out of the new render
+        expandDay(date, row, detailWrapper, { animate: false });
+        restored++;
+    }
+
+    _tableState = { structureKey: g.structureKey, days: g.daySigs, weeks: g.weekSigs };
     updateTotalsRow(sessions);
-    updateToggleAllButton(false);
+    updateToggleAllButton(restored > 0);
 }
 
 // Incremented on every modal open so out-of-order async loads can't paint
@@ -349,8 +494,8 @@ function renderHistoryItems(turns, truncated, assistantLabel) {
     return items + tail;
 }
 
-export function showSessionDetail(idx) {
-    const s = _sessionDetailStore[idx];
+export function showSessionDetail(key) {
+    const s = _sessionDetailStore.get(key);
     if (!s) return;
 
     const requestId = ++_sessionDetailRequestId;
@@ -376,7 +521,7 @@ export function showSessionDetail(idx) {
     const modalHTML = `
         <div class="session-modal-header">
             <div class="session-modal-title">${escapeHTML(titleText)}</div>
-            <button class="session-modal-close" onclick="closeSessionDetail()">&times;</button>
+            <button class="session-modal-close" data-action="close-session-detail">&times;</button>
         </div>
         <div class="session-modal-body">
             <div class="session-modal-meta">
@@ -420,11 +565,11 @@ export function showSessionDetail(idx) {
                 <div class="resume-label">Resume this session</div>
                 <div class="resume-cmd-row">
                     <code class="resume-cmd">${escapeHTML(resumeCmd)}</code>
-                    <button class="resume-copy-btn" onclick="copySessionCmd('${resumeCmd}', this)">Copy</button>
+                    <button class="resume-copy-btn" data-copy="${escapeHTML(resumeCmd)}">Copy</button>
                 </div>
                 ${s.cwd ? `<div class="resume-cmd-row" style="margin-top:6px;">
                     <code class="resume-cmd">cd ${escapeHTML(s.cwd)} && ${escapeHTML(resumeCmd)}</code>
-                    <button class="resume-copy-btn" onclick="copySessionCmd('cd ${s.cwd.replace(/'/g, "\\\\'")} && ${resumeCmd}', this)">Copy</button>
+                    <button class="resume-copy-btn" data-copy="${escapeHTML(`cd ${s.cwd} && ${resumeCmd}`)}">Copy</button>
                 </div>` : ''}
             </div>` : ''}
         </div>`;
@@ -445,6 +590,21 @@ export function showSessionDetail(idx) {
         document.body.appendChild(modal);
     }
     modal.innerHTML = modalHTML;
+
+    // The app CSP is `script-src 'self'` (no 'unsafe-inline'), so inline on* attributes
+    // never fire — every handler has to be bound in JS. One delegated listener on the
+    // modal shell survives the innerHTML swap above.
+    if (!modal.dataset.wired) {
+        modal.addEventListener('click', e => {
+            if (e.target.closest('[data-action="close-session-detail"]')) {
+                closeSessionDetail();
+                return;
+            }
+            const copyBtn = e.target.closest('[data-copy]');
+            if (copyBtn) copySessionCmd(copyBtn.dataset.copy, copyBtn);
+        });
+        modal.dataset.wired = '1';
+    }
 
     requestAnimationFrame(() => {
         overlay.classList.add('visible');
@@ -505,8 +665,3 @@ export function initKeyboardShortcuts(toggleAllFn) {
         }
     });
 }
-
-window.toggleDay = toggleDay;
-window.showSessionDetail = showSessionDetail;
-window.closeSessionDetail = closeSessionDetail;
-window.copySessionCmd = copySessionCmd;

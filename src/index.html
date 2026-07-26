@@ -150,7 +150,7 @@
 
         <div id="day-filter-bar" style="display:none">
             <span class="day-filter-label">Filtered: <strong id="day-filter-date"></strong></span>
-            <button class="day-filter-clear" onclick="clearDayFilter()">&#x2715; clear</button>
+            <button class="day-filter-clear" id="day-filter-clear-btn">&#x2715; clear</button>
         </div>
 
         <div class="charts-grid-half">
@@ -244,7 +244,7 @@
                 </div>
                 <div class="sessions-header-right">
                     <span class="hint">click a row to expand</span>
-                    <button class="toggle-all-btn" id="toggle-all-btn" onclick="toggleAllDays()" title="Expand or collapse all date rows (Shift+E)">
+                    <button class="toggle-all-btn" id="toggle-all-btn" title="Expand or collapse all date rows (Shift+E)">
                         Expand All<span class="arrow">&#9660;</span><span class="kbd-hint">Shift+E</span>
                     </button>
                 </div>

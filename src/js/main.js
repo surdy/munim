@@ -21,10 +21,12 @@ import {
     setMostExpensive,
     toggleDay,
     toggleAllDays,
+    showSessionDetail,
     initKeyboardShortcuts
 } from './components/sessions-table.js';
 import {
     renderProjectsTable,
+    toggleProject,
     toggleAllProjects
 } from './components/projects-table.js';
 import {
@@ -37,10 +39,6 @@ import {
 let allSessionsData = [];
 let totalSessionCount = 0;
 let currentSessionView = 'timeline';
-
-window.toggleAllDays = toggleAllDays;
-window.toggleAllProjects = toggleAllProjects;
-window.clearDayFilter = clearDayFilter;
 
 function getCurrentRenderer() {
     return currentSessionView === 'projects' ? renderProjectsTable : renderSessionTable;
@@ -64,6 +62,37 @@ function toggleAllForCurrentView() {
     } else {
         toggleAllDays();
     }
+}
+
+// The app runs under `script-src 'self'` (tauri.conf.json) — inline on* attributes are
+// blocked outright, so every click handler has to be bound here. One delegated listener on
+// the tbody covers both table views and survives the innerHTML rewrites they do.
+function initTableInteractions() {
+    const tbody = document.getElementById('sessions-body');
+    if (tbody) {
+        tbody.addEventListener('click', (e) => {
+            const sessionRow = e.target.closest('tr.session-clickable[data-session-key]');
+            if (sessionRow) {
+                showSessionDetail(sessionRow.dataset.sessionKey);
+                return;
+            }
+            const dayRow = e.target.closest('tr.day-row[data-day]');
+            if (dayRow) {
+                toggleDay(dayRow.dataset.day);
+                return;
+            }
+            const projectRow = e.target.closest('tr.project-row[data-project-idx]');
+            if (projectRow) {
+                toggleProject(parseInt(projectRow.dataset.projectIdx, 10));
+            }
+        });
+    }
+
+    const toggleAllBtn = document.getElementById('toggle-all-btn');
+    if (toggleAllBtn) toggleAllBtn.addEventListener('click', toggleAllForCurrentView);
+
+    const dayFilterClear = document.getElementById('day-filter-clear-btn');
+    if (dayFilterClear) dayFilterClear.addEventListener('click', clearDayFilter);
 }
 
 function formatSinceLabel(sessions) {
@@ -206,7 +235,6 @@ async function loadData() {
         initHeatmap(allSessions);
         initCounterAnimations();
 
-        window._applyFiltersCallback = applyCurrentFilters;
         setupFilterListeners(applyCurrentFilters, applyProviderView);
 
         initKeyboardShortcuts(toggleAllForCurrentView);
@@ -311,7 +339,6 @@ function reRenderDashboard(summary, sessions) {
     initCharts(sessions);
     initHeatmap(sessions);
 
-    window._applyFiltersCallback = applyCurrentFilters;
     setupFilterListeners(applyCurrentFilters, applyProviderView);
 }
 
@@ -321,7 +348,6 @@ function setupSessionViewToggle() {
 
     const buttons = toggle.querySelectorAll('.view-toggle-btn');
     const slider = toggle.querySelector('.view-toggle-slider');
-    const toggleAllBtn = document.getElementById('toggle-all-btn');
 
     buttons.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -339,11 +365,8 @@ function setupSessionViewToggle() {
 
             currentSessionView = view;
             updateTableHeader(view);
-
-            if (toggleAllBtn) {
-                toggleAllBtn.onclick = view === 'projects' ? toggleAllProjects : toggleAllDays;
-            }
-
+            // The Expand All button and Shift+E both go through toggleAllForCurrentView,
+            // so switching views needs no rebinding.
             applyCurrentFilters();
         });
     });
@@ -365,6 +388,7 @@ function buildSessionsFromGlobals() {
 
 function init() {
     loadData();
+    initTableInteractions();
     initReloadButton();
     initDataTransfer();
 
@@ -385,7 +409,23 @@ function init() {
         document.getElementById('last-updated').textContent =
             new Date(summary.generated_at).toLocaleString();
 
+        // Re-rendering rebuilds the tbody and the chart/heatmap canvases, which resets both
+        // the table's own scroll box and (via the transient height change) the page scroll.
+        // The renderers keep expanded rows open; restore both offsets so a background
+        // refresh is invisible to someone mid-browse.
+        const scroller = document.querySelector('.sessions-table-wrap');
+        const scrollTop = scroller ? scroller.scrollTop : 0;
+        const pageY = window.scrollY;
+
         reRenderDashboard(summary, sessions);
+
+        if (scroller) scroller.scrollTop = scrollTop;
+        if (window.scrollY !== pageY) window.scrollTo(0, pageY);
+        // Charts/heatmap finish laying out a frame later; re-assert then if it moved again.
+        requestAnimationFrame(() => {
+            if (scroller && scroller.scrollTop !== scrollTop) scroller.scrollTop = scrollTop;
+            if (window.scrollY !== pageY) window.scrollTo(0, pageY);
+        });
     };
 }
 

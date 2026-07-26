@@ -8,10 +8,25 @@
 import { formatNumber } from '../utils/formatters.js';
 import { getModelInfo } from '../utils/model-utils.js';
 import { costClass, sourceClass } from '../utils/class-utils.js';
-import { updateTotalsRow, updateToggleAllButton, resetSessionStore, pushToSessionStore } from './sessions-table.js';
+import {
+    updateTotalsRow,
+    updateToggleAllButton,
+    resetSessionStore,
+    registerSession,
+    sessionsSignature,
+} from './sessions-table.js';
 
 const _builtProjects = new Set();
 let _projectsData = [];
+
+// Signature of the last render, so a silent auto-refresh that changed nothing in this
+// view is a no-op instead of a full tbody rebuild. Project rows have no intro animation,
+// so when something does change a plain rebuild is fine here.
+let _projectsSignature = null;
+
+function escapeAttr(v) {
+    return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
 
 export function extractProjectName(cwd) {
     if (!cwd) return '(No Project)';
@@ -48,15 +63,36 @@ export function groupByProject(sessions) {
 }
 
 export function renderProjectsTable(sessions) {
-    resetSessionStore();
-    _builtProjects.clear();
-
     const projects = groupByProject(sessions);
     const tbody = document.getElementById('sessions-body');
+
+    const signature = projects
+        .map(p => `${p.cwd}\u0001${sessionsSignature(p.sessions)}`)
+        .join('\u0002');
+
+    // Nothing in this view moved — leave the DOM (and any open project) alone. The
+    // getElementById guard catches the timeline view owning the tbody.
+    if (_projectsSignature === signature && document.getElementById('project-0')) {
+        updateTotalsRow(sessions);
+        return;
+    }
+
+    // Row indices are cost-ordered and can shuffle between renders, so remember the
+    // open projects by cwd (read off the *previous* _projectsData) and re-open by cwd.
+    const wasExpanded = new Set(
+        Array.from(document.querySelectorAll('.project-row.expanded'))
+            .map(r => _projectsData[parseInt(r.dataset.projectIdx, 10)]?.cwd)
+            .filter(cwd => cwd !== undefined)
+    );
+
+    resetSessionStore();
+    _builtProjects.clear();
+    _projectsSignature = signature;
 
     if (projects.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="no-data">No sessions match the current filters.</td></tr>';
         updateTotalsRow([]);
+        updateToggleAllButton(false);
         return;
     }
 
@@ -89,7 +125,7 @@ export function renderProjectsTable(sessions) {
         const displayName = project.name;
         const fullPath = project.cwd || '(no working directory)';
 
-        html += `<tr class="project-row" id="project-${idx}" onclick="toggleProject(${idx})">
+        html += `<tr class="project-row" id="project-${idx}" data-project-idx="${idx}">
             <td>
                 <span class="chevron">\u25B6</span>
                 <span class="project-icon">\uD83D\uDCC1</span>
@@ -114,8 +150,14 @@ export function renderProjectsTable(sessions) {
 
     _projectsData = projects;
 
+    let restored = 0;
+    projects.forEach((project, idx) => {
+        if (!wasExpanded.has(project.cwd)) return;
+        if (expandProject(idx)) restored++;
+    });
+
     updateTotalsRow(sessions);
-    updateToggleAllButton(false);
+    updateToggleAllButton(restored > 0);
 }
 
 function buildProjectDetail(project) {
@@ -136,10 +178,10 @@ function buildProjectDetail(project) {
         const mi = getModelInfo(s.model);
         const sc = sourceClass(s.source);
         const titleText = s.title ? s.title.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : '\u2014';
-        const sessionIdx = pushToSessionStore(s);
+        const sessionKey = registerSession(s);
         const dateLabel = s.date ? new Date(s.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '\u2014';
 
-        subTableHTML += `<tr class="session-clickable" onclick="showSessionDetail(${sessionIdx})">
+        subTableHTML += `<tr class="session-clickable" data-session-key="${escapeAttr(sessionKey)}">
             <td style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;">${dateLabel}</td>
             <td style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;">${s.time || '\u2014'}</td>
             <td class="session-title-cell" title="${titleText}">${titleText}</td>
@@ -157,6 +199,21 @@ function buildProjectDetail(project) {
     return `<div class="project-detail">${subTableHTML}</div>`;
 }
 
+// Returns true if the project was found and opened.
+function expandProject(idx) {
+    const row = document.getElementById('project-' + idx);
+    const wrapper = document.getElementById('project-detail-wrapper-' + idx);
+    if (!row || !wrapper) return false;
+
+    if (!_builtProjects.has(idx) && _projectsData[idx]) {
+        wrapper.innerHTML = buildProjectDetail(_projectsData[idx]);
+        _builtProjects.add(idx);
+    }
+    row.classList.add('expanded');
+    wrapper.classList.add('open');
+    return true;
+}
+
 export function toggleProject(idx) {
     const row = document.getElementById('project-' + idx);
     const wrapper = document.getElementById('project-detail-wrapper-' + idx);
@@ -166,12 +223,7 @@ export function toggleProject(idx) {
         row.classList.remove('expanded');
         wrapper.classList.remove('open');
     } else {
-        if (!_builtProjects.has(idx) && _projectsData[idx]) {
-            wrapper.innerHTML = buildProjectDetail(_projectsData[idx]);
-            _builtProjects.add(idx);
-        }
-        row.classList.add('expanded');
-        wrapper.classList.add('open');
+        expandProject(idx);
     }
 
     const anyExpanded = document.querySelectorAll('.project-row.expanded').length > 0;
@@ -192,12 +244,7 @@ export function toggleAllProjects() {
 
         setTimeout(() => {
             if (shouldExpand && !row.classList.contains('expanded')) {
-                if (!_builtProjects.has(idx) && _projectsData[idx]) {
-                    wrapper.innerHTML = buildProjectDetail(_projectsData[idx]);
-                    _builtProjects.add(idx);
-                }
-                row.classList.add('expanded');
-                wrapper.classList.add('open');
+                expandProject(idx);
             } else if (!shouldExpand && row.classList.contains('expanded')) {
                 row.classList.remove('expanded');
                 wrapper.classList.remove('open');
@@ -207,6 +254,3 @@ export function toggleAllProjects() {
 
     updateToggleAllButton(shouldExpand);
 }
-
-// Expose to window for onclick handlers
-window.toggleProject = toggleProject;

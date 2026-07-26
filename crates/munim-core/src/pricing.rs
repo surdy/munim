@@ -70,6 +70,46 @@ impl Pricing {
     pub fn codex_rate(&self, model: &str) -> &Rate {
         Self::find(&self.codex, &self.codex_default, model)
     }
+
+    /// Deterministic fingerprint of the whole rate table.
+    ///
+    /// Cached session records carry a precomputed `cost`, and the incremental scan
+    /// replays unchanged files verbatim (BUILD_SPEC §4.7) — so editing a rate is
+    /// invisible on already-scanned sessions. The scan index stores this fingerprint and
+    /// discards itself when the table changes, forcing a re-price.
+    ///
+    /// FNV-1a, hand-rolled: `DefaultHasher` is explicitly not stable across Rust
+    /// releases, and an unstable value here would cause spurious full rescans.
+    pub fn fingerprint(&self) -> String {
+        fn feed(mut h: u64, s: &str) -> u64 {
+            for b in s.as_bytes() {
+                h ^= *b as u64;
+                h = h.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+            h
+        }
+        fn rate(h: u64, r: &Rate) -> u64 {
+            // Fixed precision so the value doesn't depend on float formatting quirks.
+            feed(
+                h,
+                &format!(
+                    "{:.6}|{:.6}|{:.6}|{:.6};",
+                    r.input, r.output, r.cache_write, r.cache_read
+                ),
+            )
+        }
+
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for list in [&self.claude, &self.codex] {
+            for row in list {
+                h = rate(feed(h, &format!("{}=", row.key)), &row.rate);
+            }
+            h = feed(h, "#");
+        }
+        h = rate(h, &self.claude_default);
+        h = rate(h, &self.codex_default);
+        format!("{h:016x}")
+    }
 }
 
 /// Claude cost (BUILD_SPEC §4.5): every token class billed at its rate.
@@ -123,7 +163,32 @@ mod tests {
     #[test]
     fn opus_5_beats_generic_opus() {
         // order-sensitivity: "opus-5" row must win before the generic "opus" row.
-        assert_eq!(pricing().claude_rate("claude-opus-5").output, 100.0);
+        // Asserted against both rows so the test still discriminates if a rate changes.
+        let p = pricing();
+        assert_eq!(p.claude_rate("claude-opus-5").output, 25.0);
+        assert_eq!(p.claude_rate("claude-opus-4-1").output, 75.0);
+    }
+
+    /// Regression: a released model with no row silently bills at the Sonnet default,
+    /// which under-reported Claude Fable 5 by ~3.3x until a row was added.
+    #[test]
+    fn current_models_all_have_an_explicit_row() {
+        let p = pricing();
+        let default_rate = (p.claude_default.input, p.claude_default.output);
+        for model in [
+            "claude-fable-5",
+            "claude-mythos-5",
+            "claude-opus-5",
+            "claude-opus-4-8",
+            "claude-haiku-4-5-20251001",
+        ] {
+            let r = p.claude_rate(model);
+            assert_ne!(
+                (r.input, r.output),
+                default_rate,
+                "{model} is falling through to claude_default — add a [[claude]] row"
+            );
+        }
     }
 
     #[test]

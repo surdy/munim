@@ -5,12 +5,30 @@
 # See BUILD_SPEC.md §4.5.
 
 # ---- Anthropic / Claude family ----
+# Cache rates follow the published multipliers: write = 1.25x input (5-minute TTL),
+# read = 0.1x input.
+
+[[claude]]
+match = "fable-5"
+input = 10.0
+output = 50.0
+cache_write = 12.5
+cache_read = 1.0
+
+# Same capabilities and pricing as Fable 5; Project Glasswing only.
+[[claude]]
+match = "mythos-5"
+input = 10.0
+output = 50.0
+cache_write = 12.5
+cache_read = 1.0
+
 [[claude]]
 match = "opus-5"
-input = 20.0
-output = 100.0
-cache_write = 25.0
-cache_read = 2.0
+input = 5.0
+output = 25.0
+cache_write = 6.25
+cache_read = 0.50
 
 [[claude]]
 match = "opus-4.9"
@@ -60,6 +78,16 @@ input = 15.0
 output = 75.0
 cache_write = 18.75
 cache_read = 1.50
+
+# Standard rate. Sonnet 5 also has introductory pricing of $2/$10 per MTok through
+# 2026-08-31 — munim has no date-aware rates, so this bills at the standard rate and
+# slightly over-reports Sonnet 5 until the intro period ends.
+[[claude]]
+match = "sonnet-5"
+input = 3.0
+output = 15.0
+cache_write = 3.75
+cache_read = 0.30
 
 [[claude]]
 match = "sonnet"

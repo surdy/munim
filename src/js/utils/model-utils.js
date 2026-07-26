@@ -1,55 +1,7 @@
-// Per-million-token pricing in USD. Speculative future-model prices are
-// projections based on historical pricing trends — update on release.
-export function getPricingForModel(model) {
-    if (!model) return { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 };
-    const m = model.toLowerCase().replace(/_/g, '-');
-
-    if (m.includes('gpt-5-5') || m.includes('gpt-5.5'))
-        return { input: 5.00, output: 30.00, cacheWrite: 0, cacheRead: 0.50 };
-    if (m.includes('gpt-5-4-mini') || m.includes('gpt-5.4-mini'))
-        return { input: 0.75, output: 4.50, cacheWrite: 0, cacheRead: 0.075 };
-    if (m.includes('gpt-5-4') || m.includes('gpt-5.4'))
-        return { input: 2.50, output: 15.00, cacheWrite: 0, cacheRead: 0.25 };
-    if (m.includes('gpt-5-3-codex') || m.includes('gpt-5.3-codex'))
-        return { input: 1.75, output: 14.00, cacheWrite: 0, cacheRead: 0.175 };
-    if (m.includes('gpt-5-2') || m.includes('gpt-5.2'))
-        return { input: 2.00, output: 10.00, cacheWrite: 0, cacheRead: 0.20 };
-    if (m.startsWith('gpt-') || m.includes('codex'))
-        return { input: 2.50, output: 15.00, cacheWrite: 0, cacheRead: 0.25 };
-
-    if (m.includes('opus-5'))
-        return { input: 20, output: 100, cacheWrite: 25, cacheRead: 2.0 };
-    if (m.includes('sonnet-5'))
-        return { input: 5, output: 20, cacheWrite: 6.25, cacheRead: 0.50 };
-    if (m.includes('haiku-5'))
-        return { input: 1.5, output: 7.5, cacheWrite: 1.875, cacheRead: 0.15 };
-
-    if (m.includes('opus-6') || m.includes('opus-7') || m.includes('opus-8') || m.includes('opus-9'))
-        return { input: 30, output: 150, cacheWrite: 37.5, cacheRead: 3.0 };
-    if (m.includes('sonnet-6') || m.includes('sonnet-7') || m.includes('sonnet-8') || m.includes('sonnet-9'))
-        return { input: 8, output: 40, cacheWrite: 10, cacheRead: 0.80 };
-    if (m.includes('haiku-6') || m.includes('haiku-7') || m.includes('haiku-8') || m.includes('haiku-9'))
-        return { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.20 };
-
-    if (m.includes('opus-4-5') || m.includes('opus-4.5') || m.includes('opus-4-6') || m.includes('opus-4.6') || m.includes('opus-4-7') || m.includes('opus-4.7') || m.includes('opus-4-8') || m.includes('opus-4.8') || m.includes('opus-4-9') || m.includes('opus-4.9'))
-        return { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.50 };
-    if (m.includes('opus-4-1') || m.includes('opus-4.1') || m.includes('opus-4-0') || m.includes('opus-4.0'))
-        return { input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.50 };
-    if (m.includes('opus'))
-        return { input: 15, output: 75, cacheWrite: 18.75, cacheRead: 1.50 };
-
-    if (m.includes('sonnet-4') || m.includes('sonnet-3-7') || m.includes('sonnet-3.7') || m.includes('sonnet-3-5') || m.includes('sonnet-3.5'))
-        return { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 };
-    if (m.includes('sonnet'))
-        return { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 };
-
-    if (m.includes('haiku-4-5') || m.includes('haiku-4.5') || m.includes('haiku-4-0') || m.includes('haiku-4.0'))
-        return { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.10 };
-    if (m.includes('haiku-3') || m.includes('haiku'))
-        return { input: 0.25, output: 1.25, cacheWrite: 0.30, cacheRead: 0.03 };
-
-    return { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.30 };
-}
+// NOTE: the frontend never prices anything — munim-core (Rust) is the only cost
+// calculator and the dashboard displays precomputed costs (BUILD_SPEC §4.5).
+// A duplicate JS rate table used to live here; it was dead code and had drifted out of
+// sync with pricing.toml. Rates belong in pricing.toml only.
 
 // Most-specific matches first — order matters.
 export function getModelInfo(model) {
@@ -63,6 +15,10 @@ export function getModelInfo(model) {
     if (m.includes('gpt-5-2') || m.includes('gpt-5.2')) return { name: 'GPT-5.2', cls: 'model-gpt-frontier' };
     if (m.startsWith('gpt-')) return { name: model, cls: 'model-gpt-frontier' };
     if (m.includes('codex')) return { name: model, cls: 'model-codex' };
+
+    if (m.includes('fable-5')) return { name: 'Fable 5', cls: 'model-opus' };
+    if (m.includes('mythos-5')) return { name: 'Mythos 5', cls: 'model-opus' };
+    if (m.includes('mythos')) return { name: 'Mythos', cls: 'model-opus' };
 
     if (m.includes('opus-5-1') || m.includes('opus-5.1')) return { name: 'Opus 5.1', cls: 'model-opus' };
     if (m.includes('opus-5-0') || m.includes('opus-5.0') || m.includes('opus-5')) return { name: 'Opus 5', cls: 'model-opus' };
@@ -123,6 +79,8 @@ export function getModelInfo(model) {
 export function getModelFamily(model) {
     if (!model) return 'Unknown';
     const m = model.toLowerCase();
+    if (m.includes('fable')) return 'Fable';
+    if (m.includes('mythos')) return 'Mythos';
     if (m.includes('opus')) return 'Opus';
     if (m.includes('sonnet')) return 'Sonnet';
     if (m.includes('haiku')) return 'Haiku';

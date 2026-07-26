@@ -63,15 +63,47 @@ pub fn save_cache(dir: &Path, sessions: &[SessionRecord]) -> std::io::Result<()>
     atomic_write(&dir.join(CACHE_FILE), &bytes)
 }
 
-pub fn load_scan_index(dir: &Path) -> ScanIndex {
-    match std::fs::read_to_string(dir.join(SCAN_INDEX_FILE)) {
-        Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
-        Err(_) => ScanIndex::new(),
-    }
+/// On-disk shape of `scan-index.json`.
+///
+/// The `pricing` fingerprint is what makes a rate change take effect: cached records
+/// carry a precomputed cost and unchanged files are replayed verbatim, so without it an
+/// edit to `pricing.toml` only affects sessions that happen to be rewritten afterwards.
+///
+/// Older builds wrote a bare `{path: fingerprint}` map. That fails to deserialize here,
+/// which `load_scan_index` turns into an empty index — a one-time full re-price on
+/// upgrade, which is exactly what a pricing correction needs.
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+struct PersistedIndex {
+    #[serde(default)]
+    pricing: String,
+    #[serde(default)]
+    files: ScanIndex,
 }
 
-pub fn save_scan_index(dir: &Path, index: &ScanIndex) -> std::io::Result<()> {
-    let bytes = serde_json::to_vec(index)?;
+/// Returns an empty index when the file is missing, unreadable, written by an older
+/// build, or was produced under different pricing — every case means "re-scan".
+pub fn load_scan_index(dir: &Path, pricing_fingerprint: &str) -> ScanIndex {
+    let Ok(raw) = std::fs::read_to_string(dir.join(SCAN_INDEX_FILE)) else {
+        return ScanIndex::new();
+    };
+    let Ok(parsed) = serde_json::from_str::<PersistedIndex>(&raw) else {
+        return ScanIndex::new();
+    };
+    if parsed.pricing != pricing_fingerprint {
+        return ScanIndex::new();
+    }
+    parsed.files
+}
+
+pub fn save_scan_index(
+    dir: &Path,
+    index: &ScanIndex,
+    pricing_fingerprint: &str,
+) -> std::io::Result<()> {
+    let bytes = serde_json::to_vec(&PersistedIndex {
+        pricing: pricing_fingerprint.to_string(),
+        files: index.clone(),
+    })?;
     atomic_write(&dir.join(SCAN_INDEX_FILE), &bytes)
 }
 
@@ -83,14 +115,17 @@ pub fn collect_and_persist(
     data_dir: &Path,
 ) -> std::io::Result<CollectOutput> {
     std::fs::create_dir_all(data_dir)?;
+    let fingerprint = pricing.fingerprint();
     let caches = Caches {
-        scan_index: load_scan_index(data_dir),
+        // An empty index here (new install, or rates changed) re-parses every file, which
+        // re-prices every session against the current table.
+        scan_index: load_scan_index(data_dir, &fingerprint),
         cached_sessions: load_cache(data_dir),
     };
     let res = collect(home, pricing, &caches);
     // Best-effort persistence: a failed cache write shouldn't fail the whole request.
     let _ = save_cache(data_dir, &res.sessions);
-    let _ = save_scan_index(data_dir, &res.scan_index);
+    let _ = save_scan_index(data_dir, &res.scan_index, &fingerprint);
     Ok(res.output)
 }
 
@@ -152,6 +187,51 @@ mod tests {
     fn missing_files_are_empty() {
         let dir = Tmp::new();
         assert!(load_cache(dir.path()).is_empty());
-        assert!(load_scan_index(dir.path()).is_empty());
+        assert!(load_scan_index(dir.path(), "abc").is_empty());
+    }
+
+    #[test]
+    fn scan_index_round_trips_under_the_same_pricing() {
+        let dir = Tmp::new();
+        let mut idx = ScanIndex::new();
+        idx.insert(
+            "/tmp/a.jsonl".into(),
+            crate::collector::Fingerprint {
+                mtime: 1,
+                size: 100,
+            },
+        );
+        save_scan_index(dir.path(), &idx, "rates-v1").unwrap();
+        assert_eq!(load_scan_index(dir.path(), "rates-v1").len(), 1);
+    }
+
+    /// The whole point of the fingerprint: changed rates must drop the index so every
+    /// file is re-parsed and re-priced instead of replaying a stale cached cost.
+    #[test]
+    fn changed_pricing_discards_the_scan_index() {
+        let dir = Tmp::new();
+        let mut idx = ScanIndex::new();
+        idx.insert(
+            "/tmp/a.jsonl".into(),
+            crate::collector::Fingerprint {
+                mtime: 1,
+                size: 100,
+            },
+        );
+        save_scan_index(dir.path(), &idx, "rates-v1").unwrap();
+        assert!(load_scan_index(dir.path(), "rates-v2").is_empty());
+    }
+
+    /// Index files from builds before the fingerprint existed (a bare path→fingerprint
+    /// map) must be treated as stale rather than parsed as valid.
+    #[test]
+    fn legacy_bare_map_index_is_discarded() {
+        let dir = Tmp::new();
+        std::fs::write(
+            dir.path().join(SCAN_INDEX_FILE),
+            br#"{"/tmp/a.jsonl":{"mtime":1,"size":100}}"#,
+        )
+        .unwrap();
+        assert!(load_scan_index(dir.path(), "rates-v1").is_empty());
     }
 }

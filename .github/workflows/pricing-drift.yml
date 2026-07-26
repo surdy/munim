@@ -1,0 +1,99 @@
+# Pricing drift check (see scripts/check-pricing.py).
+#
+# A released model with no matching row in pricing.toml doesn't error — it silently
+# bills at the `claude_default` catch-all. Claude Fable 5 was under-reported by ~3.3x
+# that way, with an "Unknown" chart slice as the only symptom. This turns that into a
+# failing check.
+#
+# On a pull request it blocks the merge. On the weekly schedule there's nobody watching
+# a red run, so it opens (or updates) a single tracking issue instead.
+#
+# Optional repo secret:
+#   ANTHROPIC_API_KEY — lets the check use `GET /v1/models` for the authoritative model
+#   list. Without it the job still runs, deriving the list from LiteLLM instead. Only a
+#   models-list read; no inference is performed.
+
+name: pricing-drift
+
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC — off the hour to dodge scheduler congestion
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'pricing.toml'
+      - 'scripts/check-pricing.py'
+      - '.github/workflows/pricing-drift.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pricing-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: compare pricing.toml against published rates
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # only for the scheduled-run report below
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12' # tomllib is stdlib from 3.11; the script needs no deps
+
+      - name: Check for drift
+        id: check
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set +e
+          python3 scripts/check-pricing.py --verbose > report.txt 2>&1
+          status=$?
+          set -e
+          cat report.txt
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          # Exit 2 means a source was unreachable — a flaky network shouldn't read as
+          # "rates are wrong", so surface it without failing the run.
+          if [ "$status" -eq 2 ]; then
+            echo "::warning::could not reach a pricing source; drift was not checked"
+            exit 0
+          fi
+          exit "$status"
+
+      # Scheduled runs have no reviewer, so file the report where it will be seen.
+      # Reuses one open issue rather than filing a new one every Monday.
+      - name: Report drift as an issue
+        if: failure() && steps.check.outputs.status == '1' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          title='pricing.toml has drifted from published rates'
+          {
+            echo "Detected by \`.github/workflows/pricing-drift.yml\` on $(date -u +%Y-%m-%d)."
+            echo
+            echo '```'
+            cat report.txt
+            echo '```'
+            echo
+            echo "Fix in \`pricing.toml\`, or record an intentional difference in"
+            echo "\`EXPECTED_DIFFS\` in \`scripts/check-pricing.py\` with a reason."
+            echo
+            echo "Note: correcting a rate now re-prices already-scanned sessions — the"
+            echo "scan index carries a fingerprint of the rate table and invalidates"
+            echo "itself when it changes."
+          } > body.md
+
+          existing=$(gh issue list --state open --search "$title in:title" \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "$title" --body-file body.md
+          fi
+        # Filing the issue is best-effort; the run is already red either way.
+        continue-on-error: true

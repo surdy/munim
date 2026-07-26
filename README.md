@@ -23,6 +23,8 @@ munim/
 ├── LICENSE                    MIT
 ├── package.json               frontend scripts + `tauri` CLI
 ├── pricing.toml               editable per-model pricing (BUILD_SPEC §4.5)
+├── scripts/
+│   └── check-pricing.py       flags models missing a rate row / rates that have drifted
 ├── src/                       frontend (vanilla JS + Chart.js) — port the original dashboard here
 │   └── index.html
 └── src-tauri/
@@ -71,6 +73,28 @@ Linux is packaged as a **Flatpak** (not a raw Tauri bundle) — see `src-tauri/f
   ```
 
 CI (`.github/workflows/release.yml`) builds both, signs, generates the updater manifest, and publishes.
+
+## Keeping pricing current
+
+Rates live in [`pricing.toml`](./pricing.toml) and nowhere else — munim-core is the only
+cost calculator. A model with no matching row doesn't error; it silently bills at the
+`claude_default` catch-all, so a newly released model is under- or over-reported with no
+visible symptom beyond an odd-looking chart.
+
+`.github/workflows/pricing-drift.yml` guards against that weekly (and on any PR touching
+the table). It compares every current Claude model against published rates and fails when
+one has no explicit row or when a rate has drifted. Run it yourself with:
+
+```bash
+python3 scripts/check-pricing.py --verbose
+```
+
+It only reports — it never edits `pricing.toml`. Rates are a judgment call (Sonnet 5's
+introductory pricing, for instance, is deliberately not tracked); intentional differences
+are recorded in `EXPECTED_DIFFS` in the script, each with a reason.
+
+Editing a rate re-prices sessions munim has already scanned: the scan index stores a
+fingerprint of the rate table and invalidates itself when that changes.
 
 ## License
 

@@ -603,6 +603,37 @@ fn parse_codex_format(path: &Path, pricing: &Pricing) -> DayMap {
     days
 }
 
+/// Recompute a record's cost from its stored token counts at current rates.
+///
+/// Used for records preserved from cache whose source file no longer exists, so a
+/// corrected rate still reaches them. Mirrors the per-provider math in the parsers:
+/// Codex bills `input_tokens` inclusive of the cached portion (`codex_cost` subtracts
+/// it), while Claude bills each token class separately.
+///
+/// Approximate for a session-day that used more than one model: parsing prices each
+/// message at its own model's rate, but a record keeps only the last model seen, so
+/// this bills the day's whole token total at that one rate. The per-message breakdown
+/// is unrecoverable once the file is gone — a stale rate on every token is the worse
+/// of the two errors, so re-pricing still wins. Records whose file still exists are
+/// re-parsed and keep exact per-message pricing.
+fn reprice(pricing: &Pricing, s: &SessionRecord) -> f64 {
+    match s.provider {
+        Provider::Codex => pricing::codex_cost(
+            pricing.codex_rate(&s.model),
+            s.input_tokens,
+            s.cache_read,
+            s.output_tokens,
+        ),
+        Provider::Claude => pricing::claude_cost(
+            pricing.claude_rate(&s.model),
+            s.input_tokens,
+            s.output_tokens,
+            s.cache_write,
+            s.cache_read,
+        ),
+    }
+}
+
 /// The parser + provider selected per source.
 #[derive(Clone, Copy)]
 enum Format {
@@ -1232,6 +1263,11 @@ pub fn collect(home: &Path, pricing: &Pricing, caches: &Caches) -> CollectResult
     collect_codex(&mut ctx, home, &mut sessions);
 
     // Preserve historical / imported records whose file didn't resolve this run.
+    //
+    // Their cost is re-derived from the cached token counts rather than replayed: the
+    // source file is gone, so this is the only chance to apply a corrected rate. Without
+    // it, a session whose JSONL has been deleted keeps whatever rate was in effect when
+    // it was last parsed, forever — invisible, and unfixable by any cache flush.
     let mut preserved = 0;
     for s in &caches.cached_sessions {
         let resolved = s
@@ -1240,7 +1276,9 @@ pub fn collect(home: &Path, pricing: &Pricing, caches: &Caches) -> CollectResult
             .map(|fp| ctx.seen.contains(fp))
             .unwrap_or(false);
         if !resolved {
-            sessions.push(s.clone());
+            let mut s = s.clone();
+            s.cost = reprice(pricing, &s);
+            sessions.push(s);
             preserved += 1;
         }
     }
@@ -1387,7 +1425,9 @@ mod tests {
     #[test]
     fn preserves_historical_when_file_gone() {
         let home = Tmp::new();
-        // A cached record whose filePath does not exist on disk this run.
+        // A cached record whose filePath does not exist on disk this run. Its stored cost
+        // is deliberately wrong (as if written under an older, incorrect rate table) so
+        // this also covers the re-pricing below.
         let ghost = SessionRecord {
             date: "2020-01-01".into(),
             time: "00:00".into(),
@@ -1395,8 +1435,8 @@ mod tests {
             source: "Claude Code".into(),
             file: "old.jsonl".into(),
             cost: 4.2,
-            input_tokens: 1,
-            output_tokens: 1,
+            input_tokens: 1_000_000,
+            output_tokens: 0,
             cache_read: 0,
             cache_write: 0,
             model: "claude-sonnet-4-5".into(),
@@ -1413,16 +1453,19 @@ mod tests {
         let res = collect(home.path(), &Pricing::embedded_default(), &caches);
         assert_eq!(res.stats.preserved, 1);
         assert_eq!(res.output.claude.len(), 1);
+
+        // The record survives, but its cost is re-derived at current rates rather than
+        // replayed: 1M input tokens at the $3/MTok Sonnet rate, not the stale $4.20.
+        let total = res
+            .output
+            .summary
+            .totals
+            .get("grand_total")
+            .copied()
+            .unwrap();
         assert!(
-            (res.output
-                .summary
-                .totals
-                .get("grand_total")
-                .copied()
-                .unwrap()
-                - 4.2)
-                .abs()
-                < 1e-9
+            (total - 3.0).abs() < 1e-9,
+            "preserved record should be re-priced to 3.0, got {total}"
         );
     }
 }

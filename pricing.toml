@@ -15,9 +15,10 @@ output = 50.0
 cache_write = 12.5
 cache_read = 1.0
 
-# Same capabilities and pricing as Fable 5; Project Glasswing only.
+# Same capabilities and pricing as Fable 5; Project Glasswing only. Matches every
+# Mythos variant (mythos-5, mythos-preview) — they share the Fable 5 rate.
 [[claude]]
-match = "mythos-5"
+match = "mythos"
 input = 10.0
 output = 50.0
 cache_write = 12.5

@@ -1,5 +1,9 @@
 .container {
-    max-width: 1440px;
+    /* Fluid up to a generous cap. The old 1440px cap left visible bg-primary gutters
+       on a maximized window; past ~2000px the tables stretch their columns apart, so
+       centre the layout rather than growing forever. */
+    width: 100%;
+    max-width: 2000px;
     margin: 0 auto;
     padding: 32px 40px;
     position: relative;
